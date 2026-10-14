@@ -13,6 +13,66 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="/manifest.json" />
+    <script>
+      // Pemulihan otomatis jika terjadi error pemuatan modul script (vite:preloadError / Failed to load module script)
+      (function() {
+        function reloadOnce() {
+          try {
+            if (!sessionStorage.getItem('app_reload_on_deploy_error')) {
+              sessionStorage.setItem('app_reload_on_deploy_error', 'true');
+              console.warn('[Auto-Recovery] Mendeteksi error chunk deployment lama. Memuat ulang halaman...');
+              window.location.reload();
+            }
+          } catch (e) {
+            window.location.reload();
+          }
+        }
+
+        // 1. Vite preload error event
+        window.addEventListener('vite:preloadError', function(event) {
+          event.preventDefault();
+          reloadOnce();
+        });
+
+        // 2. Global script error listener
+        window.addEventListener('error', function(event) {
+          var message = (event && (event.message || (event.error && event.error.message))) || '';
+          if (
+            typeof message === 'string' &&
+            (message.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+             message.indexOf('error loading dynamically imported module') !== -1 ||
+             message.indexOf('Expected a JavaScript-or-Wasm module script') !== -1 ||
+             message.indexOf('Failed to load module script') !== -1)
+          ) {
+            reloadOnce();
+          }
+        }, true);
+
+        // 3. Unhandled promise rejection
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && event.reason;
+          var message = (reason && (reason.message || String(reason))) || '';
+          if (
+            typeof message === 'string' &&
+            (message.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+             message.indexOf('error loading dynamically imported module') !== -1 ||
+             message.indexOf('Expected a JavaScript-or-Wasm module script') !== -1 ||
+             message.indexOf('Failed to load module script') !== -1)
+          ) {
+            reloadOnce();
+          }
+        });
+
+        // Reset tanda reload setelah halaman berhasil berjalan normal
+        window.addEventListener('load', function() {
+          setTimeout(function() {
+            try {
+              sessionStorage.removeItem('app_reload_on_deploy_error');
+            } catch (e) {}
+          }, 4000);
+        });
+      })();
+    </script>
   </head>
   <body class="bg-stone-50 text-stone-900 antialiased selection:bg-orange-500 selection:text-white">
     <div id="root"></div>
