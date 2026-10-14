@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Hanya Admin aktif yang terdaftar di koleksi users
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
+    // Koleksi users: Pengguna login boleh baca profilnya sendiri; Admin boleh kelola
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // Koleksi categories: Customer anonim & Admin boleh baca; Hanya Admin boleh tulis
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Koleksi menus: Customer anonim & Admin boleh baca; Hanya Admin boleh tulis
+    match /menus/{menuId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Koleksi settings: Customer anonim & Admin boleh baca; Hanya Admin boleh tulis
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Koleksi counters: Customer boleh membaca dan menulis hanya untuk increment lastNumber
+    match /counters/{dateKey} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+        request.resource.data.lastNumber is number &&
+        request.resource.data.lastNumber > 0;
+    }
+
+    // Koleksi orders
+    match /orders/{orderId} {
+      // Customer boleh membaca dokumen pesanan miliknya sendiri; Admin boleh membaca semua
+      allow get, list: if isAuthenticated() && (isAdmin() || resource.data.customerUid == request.auth.uid);
+
+      // Customer anonim boleh membuat pesanan dengan validasi data dasar tanpa cek dokumen users
+      allow create: if isAuthenticated() &&
+        request.resource.data.status == 'BARU' &&
+        request.resource.data.customerUid == request.auth.uid &&
+        request.resource.data.paymentStatus == 'BELUM_BAYAR' &&
+        request.resource.data.customerClaimedPaid == false &&
+        request.resource.data.paymentMethod in ['QRIS', 'TRANSFER', 'DI_MEJA'] &&
+        request.resource.data.customerName is string &&
+        request.resource.data.customerName.size() >= 1 &&
+        request.resource.data.customerName.size() <= 50 &&
+        request.resource.data.tableNumber is string &&
+        request.resource.data.tableNumber.size() >= 1 &&
+        request.resource.data.items is list &&
+        request.resource.data.items.size() >= 1 &&
+        request.resource.data.items.size() <= 30 &&
+        request.resource.data.totalPrice is number &&
+        request.resource.data.totalPrice > 0 &&
+        request.resource.data.payableAmount is number &&
+        request.resource.data.payableAmount >= request.resource.data.totalPrice &&
+        request.resource.data.payableAmount <= request.resource.data.totalPrice + 99;
+
+      // Update order:
+      // 1. Admin aktif boleh mengubah status & detail pembayaran. Jika status SELESAI, pembayaran harus LUNAS.
+      // 2. Customer hanya boleh mengubah customerClaimedPaid dari false ke true pada pesanannya sendiri.
+      allow update: if (
+        isAdmin() && (
+          request.resource.data.status != 'SELESAI' ||
+          request.resource.data.paymentStatus == 'LUNAS' ||
+          resource.data.paymentStatus == 'LUNAS'
+        )
+      ) || (
+        isAuthenticated() &&
+        resource.data.customerUid == request.auth.uid &&
+        resource.data.customerClaimedPaid == false &&
+        request.resource.data.customerClaimedPaid == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerClaimedPaid', 'updatedAt'])
+      );
+
+      // Dilarang menghapus riwayat order
+      allow delete: if false;
+    }
+  }
+}

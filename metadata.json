@@ -1,0 +1,6 @@
+{
+  "name": "SMART RESTAURANT ORDER SYSTEM",
+  "description": "Sistem pemesanan restoran mandiri ala POS modern dengan QR meja, notifikasi suara realtime, KDS dapur, dan manajemen kasir/admin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,154 @@
+{
+  "entities": {
+    "User": {
+      "title": "UserProfile",
+      "description": "Akun staf restoran (ADMIN)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["ADMIN"] },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "role", "active", "createdBy"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Kategori hidangan menu restoran",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "sortOrder": { "type": "number" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["name", "sortOrder", "active"]
+    },
+    "Menu": {
+      "title": "Menu",
+      "description": "Item hidangan menu makanan dan minuman",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "price": { "type": "number" },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "imageData": { "type": "string" },
+        "available": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "price", "categoryId", "available", "sortOrder"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Dokumen pesanan pelanggan meja mandiri",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "number" },
+        "orderCode": { "type": "string", "maxLength": 10 },
+        "dateKey": { "type": "string", "maxLength": 20 },
+        "customerName": { "type": "string", "maxLength": 50 },
+        "tableNumber": { "type": "string", "maxLength": 20 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 300 },
+        "status": {
+          "type": "string",
+          "enum": ["BARU", "DITERIMA", "SELESAI", "DIBATALKAN"]
+        },
+        "paymentMethod": { "type": "string", "enum": ["QRIS", "TRANSFER", "DI_MEJA"] },
+        "uniqueCode": { "type": "number" },
+        "payableAmount": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["BELUM_BAYAR", "LUNAS"] },
+        "paidMethodFinal": { "type": "string", "enum": ["TUNAI", "QRIS", "TRANSFER"] },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "customerClaimedPaid": { "type": "boolean" },
+        "cancelReason": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "acceptedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "cancelledAt": { "type": "string", "format": "date-time" },
+        "acceptedBy": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "orderNumber",
+        "orderCode",
+        "dateKey",
+        "customerName",
+        "tableNumber",
+        "customerUid",
+        "items",
+        "totalPrice",
+        "payableAmount",
+        "paymentMethod",
+        "paymentStatus",
+        "status"
+      ]
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Penghitung nomor antrean pesanan harian",
+      "type": "object",
+      "properties": {
+        "lastNumber": { "type": "number" }
+      },
+      "required": ["lastNumber"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Pengaturan konfigurasi restoran",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "totalTables": { "type": "number" },
+        "timezone": { "type": "string", "maxLength": 50 },
+        "orderCooldownSeconds": { "type": "number" },
+        "qrisPayload": { "type": "string" },
+        "bankName": { "type": "string" },
+        "bankAccountNumber": { "type": "string" },
+        "bankAccountName": { "type": "string" },
+        "payLaterMaxAmount": { "type": "number" },
+        "requirePrepayAll": { "type": "boolean" },
+        "paymentTimeoutMinutes": { "type": "number" },
+        "useUniqueCode": { "type": "boolean" },
+        "alarmTone": { "type": "string" },
+        "alarmMode": { "type": "string" },
+        "alarmVoiceText": { "type": "string" }
+      },
+      "required": ["name", "totalTables", "timezone", "orderCooldownSeconds"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Koleksi profil akun staf restoran"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Koleksi kategori hidangan menu"
+    },
+    "/menus/{menuId}": {
+      "schema": "Menu",
+      "description": "Koleksi item hidangan makanan dan minuman"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Koleksi transaksi pesanan pelanggan"
+    },
+    "/counters/{dateKey}": {
+      "schema": "Counter",
+      "description": "Penghitung nomor antrean atomik per tanggal Jakarta"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Konfigurasi operasional restoran"
+    }
+  }
+}
