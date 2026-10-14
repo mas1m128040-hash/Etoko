@@ -14,6 +14,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { useSoundStore } from '../../store/soundStore';
 import { useUiStore } from '../../store/uiStore';
+import { useSettings } from '../../hooks/useSettings';
 import { USER_ROLE_LABELS } from '../../config/constants';
 
 interface TopBarProps {
@@ -24,9 +25,11 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   onToggleSidebar,
-  title = 'SMART RESTO',
+  title,
   wakeLockActive = false,
 }) => {
+  const { restaurantName } = useSettings();
+  const displayTitle = title || restaurantName;
   const { profile, signOut } = useAuth();
   const { isOnline } = useConnectionStatus();
   const { soundEnabled, setSoundEnabled, isCurrentlyMuted, muteTemporarily, unmuteNow } =
@@ -51,9 +54,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           )}
 
           <div>
-            <h1 className="text-base sm:text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
-              <span>{title}</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                <span>{displayTitle}</span>
+              </h1>
+              {displayTitle !== restaurantName && (
+                <span className="hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300">
+                  {restaurantName}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Volume2,
   Save,
@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Mic,
   Music,
+  Plus,
+  FileText,
 } from 'lucide-react';
 import { settingsService } from '../../services/settingsService';
 import { seedService } from '../../services/seedService';
@@ -23,10 +25,11 @@ import { useUiStore } from '../../store/uiStore';
 import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 import { FirebaseErrorCard } from '../../components/ui/FirebaseErrorCard';
 import { Settings, AlarmTone, AlarmMode } from '../../types';
 import { DEFAULT_SETTINGS, ALARM_TONE_LABELS, ALARM_MODE_LABELS } from '../../config/constants';
-import { formatRupiah } from '../../lib/formatters';
+import { formatRupiah, formatVoiceOrderText } from '../../lib/formatters';
 
 export const SettingsPage: React.FC = () => {
   const { soundEnabled, setSoundEnabled, volume, setVolume, activateAudio } =
@@ -39,17 +42,43 @@ export const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [testingVoice, setTestingVoice] = useState(false);
+  const [isSeeded, setIsSeeded] = useState<boolean>(true); // default true (sembunyikan bila koleksi menus berisi data)
+  const [showSeedModal, setShowSeedModal] = useState<boolean>(false);
 
   // Check speech synthesis support & Indonesian voice
   const hasSpeech = audioEngine.isSpeechSupported();
   const hasIndoVoice = audioEngine.hasIndonesianVoice();
 
+  // Data contoh pesanan nyata untuk pratinjau & uji suara
+  const sampleOrder = useMemo(
+    () => ({
+      orderCode: '003',
+      tableNumber: '5',
+      customerName: 'Budi',
+      payableAmount: 75000,
+      totalPrice: 75000,
+      items: [{ qty: 2 }, { qty: 1 }],
+    }),
+    []
+  );
+
+  const samplePreviewText = useMemo(() => {
+    return formatVoiceOrderText(
+      settings.alarmVoiceText || 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.',
+      sampleOrder
+    );
+  }, [settings.alarmVoiceText, sampleOrder]);
+
   const loadSettings = async () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const s = await settingsService.getSettings();
+      const [s, seeded] = await Promise.all([
+        settingsService.getSettings(),
+        seedService.isDatabaseSeeded().catch(() => true),
+      ]);
       setSettings(s);
+      setIsSeeded(seeded);
     } catch (err: any) {
       console.error('[Firestore Error] Gagal memuat settings restoran:', err);
       setFetchError(err instanceof Error ? err : new Error(String(err)));
@@ -75,6 +104,22 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleInsertTag = (tag: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      alarmVoiceText: (prev.alarmVoiceText || '') + tag,
+    }));
+  };
+
+  const handleApplyFullTemplate = () => {
+    setSettings((prev) => ({
+      ...prev,
+      alarmVoiceText:
+        'Pesanan baru nomor {nomor} dari meja {meja} atas nama {nama}, {jumlah} item, total {total}. Segera cek dan terima.',
+    }));
+    addToast('info', 'Template lengkap berhasil dipasang.');
+  };
+
   const handleTestTone = async (tone: AlarmTone) => {
     await activateAudio();
     audioEngine.playToneOnce(tone, volume);
@@ -88,14 +133,9 @@ export const SettingsPage: React.FC = () => {
       const template =
         settings.alarmVoiceText ||
         'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
-      const sampleText = template
-        .replace(/{nomor}/g, '001')
-        .replace(/{meja}/g, '5')
-        .replace(/{nama}/g, 'Budi')
-        .replace(/{total}/g, 'Rp 75.000')
-        .replace(/{jumlah}/g, '3');
+      const spokenText = formatVoiceOrderText(template, sampleOrder);
 
-      await audioEngine.speakText(sampleText, volume);
+      await audioEngine.speakText(spokenText, volume);
       addToast('info', 'Uji suara selesai diputar.');
     } finally {
       setTestingVoice(false);
@@ -103,21 +143,17 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleSeedDatabase = async () => {
-    if (
-      !confirm(
-        'Isi basis data dengan 8 menu favorit, 3 kategori, dan setelan awal?'
-      )
-    )
-      return;
+    setShowSeedModal(false);
     setSeeding(true);
     try {
       const res = await seedService.seedInitialRestaurantData();
+      setIsSeeded(true);
       addToast(
         'success',
         `Data awal berhasil dimuat (${res.menus} menu & ${res.categories} kategori).`
       );
     } catch (err: any) {
-      addToast('error', err?.message || 'Gagal mengisi data.');
+      addToast('error', err?.message || 'Gagal mengisi data seed.');
     } finally {
       setSeeding(false);
     }
@@ -559,7 +595,7 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               {/* Teks Suara Web Speech API */}
-              <div className="pt-2 border-t border-stone-100 dark:border-stone-800 space-y-2">
+              <div className="pt-2 border-t border-stone-100 dark:border-stone-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block font-bold text-stone-800 dark:text-stone-200">
                     Template Teks Panggilan Suara Orang (Web Speech API)
@@ -572,23 +608,62 @@ export const SettingsPage: React.FC = () => {
                   )}
                 </div>
 
+                {/* Quick Insert Tag Chips & Full Template Button */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-stone-500 mr-1">Sisipkan Tag:</span>
+                  {[
+                    { tag: '{nomor}', label: '{nomor}' },
+                    { tag: '{meja}', label: '{meja}' },
+                    { tag: '{nama}', label: '{nama}' },
+                    { tag: '{total}', label: '{total}' },
+                    { tag: '{jumlah}', label: '{jumlah}' },
+                  ].map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => handleInsertTag(item.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/40 text-[#FF6B1A] font-mono text-[11px] font-bold border border-orange-200 dark:border-orange-800 transition-colors"
+                      title={`Sisipkan tag ${item.tag}`}
+                    >
+                      + {item.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleApplyFullTemplate}
+                    className="ml-auto px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-[11px] font-bold border border-stone-200 dark:border-stone-700 flex items-center gap-1 transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#FF6B1A]" />
+                    <span>Pakai Template Lengkap</span>
+                  </button>
+                </div>
+
                 <textarea
                   rows={2}
                   value={settings.alarmVoiceText}
                   onChange={(e) =>
                     setSettings({ ...settings, alarmVoiceText: e.target.value })
                   }
-                  placeholder="Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima."
+                  placeholder="Pesanan baru nomor {nomor} dari meja {meja} atas nama {nama}, {jumlah} item, total {total}. Segera cek dan terima."
                   className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
                 />
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                {/* Pratinjau Kalimat Hasil Akhir Memakai Data Contoh */}
+                <div className="p-3 bg-stone-100 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-stone-500 dark:text-stone-400">
+                    <span>Pratinjau Hasil Pembacaan (Data Contoh):</span>
+                    <span className="text-[10px] text-stone-400">
+                      Meja 5 • Budi • 3 Item • Rp 75.000
+                    </span>
+                  </div>
+                  <p className="text-stone-800 dark:text-stone-200 italic font-medium leading-relaxed">
+                    "{samplePreviewText}"
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
                   <p className="text-[11px] text-stone-400">
-                    Placeholder yang tersedia: <code className="text-[#FF6B1A]">{'{nomor}'}</code>,{' '}
-                    <code className="text-[#FF6B1A]">{'{meja}'}</code>,{' '}
-                    <code className="text-[#FF6B1A]">{'{nama}'}</code>,{' '}
-                    <code className="text-[#FF6B1A]">{'{total}'}</code>,{' '}
-                    <code className="text-[#FF6B1A]">{'{jumlah}'}</code>
+                    Alarm asli membaca teks ini saat ada pesanan baru berstatus BARU.
                   </p>
 
                   <Button
@@ -620,32 +695,74 @@ export const SettingsPage: React.FC = () => {
           </div>
         </form>
 
-        {/* Database Seeder Section */}
-        <Card className="p-5 sm:p-6 space-y-4 border-dashed border-stone-300 dark:border-stone-800">
-          <div className="flex items-center gap-2.5 pb-2 border-b border-stone-100 dark:border-stone-800">
-            <Database className="w-5 h-5 text-amber-500" />
-            <h3 className="text-base font-bold text-stone-900 dark:text-white">
-              Inisialisasi Data Awal (Seed)
-            </h3>
+        {/* Database Seeder Section: Disembunyikan bila koleksi menus sudah berisi data */}
+        {!isSeeded && (
+          <Card className="p-5 sm:p-6 space-y-4 border-dashed border-stone-300 dark:border-stone-800">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-stone-100 dark:border-stone-800">
+              <Database className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-bold text-stone-900 dark:text-white">
+                Inisialisasi Data Awal (Seed)
+              </h3>
+            </div>
+
+            <p className="text-xs text-stone-500 leading-relaxed">
+              Basis data menus saat ini masih kosong. Klik tombol di bawah untuk mengisi 8 menu siap saji, 3 kategori (Makanan, Minuman, Snack), dan data pengaturan awal.
+            </p>
+
+            <Button
+              type="button"
+              variant="secondary"
+              loading={seeding}
+              onClick={() => setShowSeedModal(true)}
+              icon={<Sparkles className="w-4 h-4 text-amber-400" />}
+            >
+              Muat Data Seed Contoh ke Firestore
+            </Button>
+          </Card>
+        )}
+      </div>
+
+      {/* Seed Confirmation Modal */}
+      <Modal
+        isOpen={showSeedModal}
+        onClose={() => setShowSeedModal(false)}
+        title="Konfirmasi Inisialisasi Data Awal (Seed Data)"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Penjelasan Tindakan Seed Data:</p>
+              <p>
+                Fitur ini akan memuat 8 hidangan menu siap saji dan 3 kategori rekomendasi (Makanan, Minuman, Snack) ke dalam Firestore.
+              </p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                Data yang sudah ada tidak akan ditimpa atau dihapus. Pastikan koneksi internet stabil saat proses seed berjalan.
+              </p>
+            </div>
           </div>
 
-          <p className="text-xs text-stone-500 leading-relaxed">
-            Gunakan tombol ini jika basis data Firestore Anda masih kosong atau baru
-            pertama kali dibuat. Fitur ini akan otomatis mengisi 8 menu siap saji,
-            3 kategori (Makanan, Minuman, Snack), dan data pengaturan awal.
-          </p>
-
-          <Button
-            type="button"
-            variant="secondary"
-            loading={seeding}
-            onClick={handleSeedDatabase}
-            icon={<Sparkles className="w-4 h-4 text-amber-400" />}
-          >
-            Muat Data Seed Contoh ke Firestore
-          </Button>
-        </Card>
-      </div>
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => setShowSeedModal(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              fullWidth
+              loading={seeding}
+              onClick={handleSeedDatabase}
+            >
+              Ya, Muat Data Awal
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AppShell>
   );
 };

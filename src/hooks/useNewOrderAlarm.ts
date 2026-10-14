@@ -6,7 +6,7 @@ import { audioEngine } from '../lib/audioEngine';
 import { useSoundStore } from '../store/soundStore';
 import { useAuth } from './useAuth';
 import { DEFAULT_SETTINGS } from '../config/constants';
-import { formatRupiah } from '../lib/formatters';
+import { formatRupiah, formatVoiceOrderText } from '../lib/formatters';
 
 export function useNewOrderAlarm() {
   const [newOrders, setNewOrders] = useState<Order[]>([]);
@@ -67,22 +67,16 @@ export function useNewOrderAlarm() {
         settings.alarmVoiceText ||
         'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
 
-      const formattedVoiceText = template
-        .replace(/{nomor}/g, oldest ? oldest.orderCode : '')
-        .replace(/{meja}/g, oldest ? oldest.tableNumber : '')
-        .replace(/{nama}/g, oldest ? oldest.customerName : '')
-        .replace(
-          /{total}/g,
-          oldest
-            ? formatRupiah(oldest.payableAmount || oldest.totalPrice)
-            : ''
-        )
-        .replace(
-          /{jumlah}/g,
-          oldest && oldest.items
-            ? String(oldest.items.reduce((acc, i) => acc + i.qty, 0))
-            : ''
-        );
+      const formattedVoiceText = oldest
+        ? formatVoiceOrderText(template, {
+            orderCode: oldest.orderCode,
+            tableNumber: oldest.tableNumber,
+            customerName: oldest.customerName,
+            payableAmount: oldest.payableAmount,
+            totalPrice: oldest.totalPrice,
+            items: oldest.items,
+          })
+        : template;
 
       audioEngine.startRepeatingAlarm({
         tone: settings.alarmTone || 'DEFAULT',

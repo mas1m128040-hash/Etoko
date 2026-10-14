@@ -86,3 +86,104 @@ export function formatElapsedDuration(elapsedMs: number): string {
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
+
+/**
+ * Konversi angka rupiah ke kalimat bahasa Indonesia (Terbilang).
+ * Contoh: 25000 -> "dua puluh lima ribu rupiah"
+ */
+export function numberToIndonesianWords(n: number): string {
+  if (typeof n !== 'number' || isNaN(n) || n <= 0) return 'nol rupiah';
+
+  const satuan = [
+    '',
+    'satu',
+    'dua',
+    'tiga',
+    'empat',
+    'lima',
+    'enam',
+    'tujuh',
+    'delapan',
+    'sembilan',
+    'sepuluh',
+    'sebelas',
+  ];
+
+  function convert(num: number): string {
+    if (num < 12) {
+      return satuan[num];
+    } else if (num < 20) {
+      return convert(num - 10) + ' belas';
+    } else if (num < 100) {
+      const rest = num % 10;
+      return convert(Math.floor(num / 10)) + ' puluh' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 200) {
+      const rest = num - 100;
+      return 'seratus' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 1000) {
+      const rest = num % 100;
+      return convert(Math.floor(num / 100)) + ' ratus' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 2000) {
+      const rest = num - 1000;
+      return 'seribu' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 1000000) {
+      const rest = num % 1000;
+      return convert(Math.floor(num / 1000)) + ' ribu' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 1000000000) {
+      const rest = num % 1000000;
+      return convert(Math.floor(num / 1000000)) + ' juta' + (rest > 0 ? ' ' + convert(rest) : '');
+    } else if (num < 1000000000000) {
+      const rest = num % 1000000000;
+      return convert(Math.floor(num / 1000000000)) + ' milyar' + (rest > 0 ? ' ' + convert(rest) : '');
+    }
+    return String(num);
+  }
+
+  const words = convert(Math.floor(n)).trim();
+  return words ? `${words} rupiah` : 'nol rupiah';
+}
+
+/**
+ * Format template suara pesanan baru dengan data pesanan nyata.
+ * Placeholder:
+ * {nomor}  -> angka biasa (contoh "3" sehingga dibacakan "nomor tiga")
+ * {meja}   -> nomor meja
+ * {nama}   -> nama pelanggan
+ * {total}  -> nominal terbilang dalam kata bahasa Indonesia ("dua puluh lima ribu rupiah")
+ * {jumlah} -> total kuantitas item pesanan
+ */
+export function formatVoiceOrderText(
+  template: string,
+  order: {
+    orderCode?: string;
+    tableNumber?: string;
+    customerName?: string;
+    payableAmount?: number;
+    totalPrice?: number;
+    items?: Array<{ qty: number }>;
+  }
+): string {
+  const tmpl = template || 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
+
+  // Format order number as regular integer (e.g. "003" -> "3" to read as "nomor tiga")
+  const rawNum = order.orderCode ? order.orderCode.replace(/\D/g, '') : '';
+  const parsedNum = rawNum ? parseInt(rawNum, 10) : '';
+  const nomorStr = parsedNum ? String(parsedNum) : (order.orderCode || '1');
+
+  const mejaStr = order.tableNumber || '-';
+  const namaStr = order.customerName || 'Pelanggan';
+
+  const amount = order.payableAmount ?? order.totalPrice ?? 0;
+  const totalStr = numberToIndonesianWords(amount);
+
+  const totalQty = order.items && order.items.length > 0
+    ? order.items.reduce((sum, item) => sum + (item.qty || 1), 0)
+    : 1;
+
+  return tmpl
+    .replace(/{nomor}/g, nomorStr)
+    .replace(/{meja}/g, mejaStr)
+    .replace(/{nama}/g, namaStr)
+    .replace(/{total}/g, totalStr)
+    .replace(/{jumlah}/g, String(totalQty));
+}

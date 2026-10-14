@@ -5,6 +5,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   orderBy,
   onSnapshot,
@@ -41,12 +42,22 @@ export const menuService = {
   },
 
   async createMenu(data: Omit<Menu, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-    const payload = {
-      ...data,
-      price: Math.max(1, Math.round(data.price)),
+    const payload: any = {
+      name: data.name.trim(),
+      description: data.description ? data.description.trim() : '',
+      price: Math.max(1, Math.round(Number(data.price))),
+      categoryId: data.categoryId,
+      sortOrder: Number(data.sortOrder) || 1,
+      available: data.available ?? true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+    if (data.imageData) {
+      payload.imageData = data.imageData;
+    }
+    if (data.imageUrl && data.imageUrl.trim()) {
+      payload.imageUrl = data.imageUrl.trim();
+    }
     const ref = await addDoc(collection(db, COLLECTION), payload);
     return ref.id;
   },
@@ -54,11 +65,21 @@ export const menuService = {
   async updateMenu(id: string, data: Partial<Menu>): Promise<void> {
     const ref = doc(db, COLLECTION, id);
     const payload: any = {
-      ...data,
       updatedAt: serverTimestamp(),
     };
+    if (data.name !== undefined) payload.name = data.name.trim();
+    if (data.description !== undefined) payload.description = data.description.trim();
+    if (data.categoryId !== undefined) payload.categoryId = data.categoryId;
+    if (data.sortOrder !== undefined) payload.sortOrder = Number(data.sortOrder) || 1;
+    if (data.available !== undefined) payload.available = Boolean(data.available);
     if (data.price !== undefined) {
-      payload.price = Math.max(1, Math.round(data.price));
+      payload.price = Math.max(1, Math.round(Number(data.price)));
+    }
+    if ('imageData' in data) {
+      payload.imageData = data.imageData ? data.imageData : deleteField();
+    }
+    if ('imageUrl' in data) {
+      payload.imageUrl = data.imageUrl && data.imageUrl.trim() ? data.imageUrl.trim() : deleteField();
     }
     await updateDoc(ref, payload);
   },

@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { useNewOrderAlarm } from '../../hooks/useNewOrderAlarm';
+import { useSettings } from '../../hooks/useSettings';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { newOrdersCount } = useNewOrderAlarm();
+  const { restaurantName } = useSettings();
 
   // 4 admin menus only: Dashboard POS, Kelola Menu, Pengaturan, Cetak QR Meja
   const links = [
@@ -67,8 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <Utensils className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-black text-stone-900 dark:text-white tracking-tight">
-                SMART RESTO
+              <h2 className="text-sm font-black text-stone-900 dark:text-white tracking-tight truncate max-w-[140px]" title={restaurantName}>
+                {restaurantName}
               </h2>
               <span className="text-[10px] font-bold text-[#FF6B1A] uppercase tracking-wider">
                 Admin Portal

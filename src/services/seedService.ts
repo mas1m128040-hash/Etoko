@@ -1,9 +1,17 @@
-import { collection, doc, writeBatch, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { DEFAULT_SETTINGS } from '../config/constants';
 
 export const seedService = {
   async seedInitialRestaurantData(): Promise<{ categories: number; menus: number }> {
+    // 0. Safety check: Pastikan seed tidak pernah menimpa menu yang sudah ada
+    const existingMenusSnap = await getDocs(collection(db, 'menus'));
+    if (!existingMenusSnap.empty) {
+      throw new Error(
+        'Koleksi menus sudah memiliki data. Seed dibatalkan untuk mencegah penimpaan atau duplikasi menu.'
+      );
+    }
+
     const batch = writeBatch(db);
 
     // 1. Initial Categories
@@ -105,15 +113,18 @@ export const seedService = {
       });
     }
 
-    // 3. Initial Settings
+    // 3. Initial Settings (hanya jika dokumen settings/restaurant belum ada)
     const settingsRef = doc(db, 'settings', 'restaurant');
-    batch.set(settingsRef, {
-      ...DEFAULT_SETTINGS,
-      name: 'Resto Contoh',
-      totalTables: 10,
-      kitchenWarnMinutes: 10,
-      kitchenLateMinutes: 20,
-    });
+    const settingsSnap = await getDoc(settingsRef);
+    if (!settingsSnap.exists()) {
+      batch.set(settingsRef, {
+        ...DEFAULT_SETTINGS,
+        name: 'Resto Contoh',
+        totalTables: 10,
+        kitchenWarnMinutes: 10,
+        kitchenLateMinutes: 20,
+      });
+    }
 
     await batch.commit();
 

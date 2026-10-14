@@ -21,11 +21,41 @@ interface UiState {
   toggleTheme: () => void;
 }
 
+const getInitialTheme = (): 'light' | 'dark' => {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const saved = localStorage.getItem('admin_theme');
+    if (saved === 'light' || saved === 'dark') {
+      return saved;
+    }
+  } catch {
+    // ignore
+  }
+  return 'dark'; // Tampilan gelap tetap default
+};
+
+const applyThemeToDom = (theme: 'light' | 'dark') => {
+  if (typeof document === 'undefined') return;
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+  try {
+    localStorage.setItem('admin_theme', theme);
+  } catch {
+    // ignore
+  }
+};
+
+const initialTheme = getInitialTheme();
+applyThemeToDom(initialTheme);
+
 export const useUiStore = create<UiState>((set, get) => ({
   toasts: [],
   isCartOpen: false,
   isSidebarOpen: false,
-  theme: 'light',
+  theme: initialTheme,
 
   addToast: (type, message, duration = 3500) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -48,6 +78,15 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   setIsCartOpen: (open) => set({ isCartOpen: open }),
   setIsSidebarOpen: (open) => set({ isSidebarOpen: open }),
-  setTheme: (theme) => set({ theme }),
-  toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+
+  setTheme: (theme) => {
+    applyThemeToDom(theme);
+    set({ theme });
+  },
+
+  toggleTheme: () => {
+    const newTheme = get().theme === 'light' ? 'dark' : 'light';
+    applyThemeToDom(newTheme);
+    set({ theme: newTheme });
+  },
 }));

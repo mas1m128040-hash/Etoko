@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import {
   Search,
@@ -15,6 +15,7 @@ import {
 import { useMenus } from '../../hooks/useMenus';
 import { useCart } from '../../hooks/useCart';
 import { useCustomerOrders } from '../../hooks/useOrders';
+import { useSettings } from '../../hooks/useSettings';
 import { settingsService } from '../../services/settingsService';
 import { Settings, Menu } from '../../types';
 import { formatRupiah } from '../../lib/formatters';
@@ -91,15 +92,30 @@ export const MenuPage: React.FC = () => {
     setSearchQuery,
   } = useMenus(!anonLoading && !anonError);
 
-  // 3. Load restaurant settings
+  // 3. Load restaurant settings via hook
+  const { restaurantName, settings: liveSettings } = useSettings();
   useEffect(() => {
-    if (!anonLoading && !anonError) {
-      settingsService
-        .getSettings()
-        .then(setSettings)
-        .catch((err) => console.error('[Firestore Error] Gagal memuat pengaturan:', err));
+    if (liveSettings) setSettings(liveSettings);
+  }, [liveSettings]);
+
+  // Broken image tracker to always show placeholder icon
+  const [brokenImageIds, setBrokenImageIds] = useState<Record<string, boolean>>({});
+
+  // Kategori Customer: hanya tampilkan kategori yang aktif DAN memiliki minimal satu menu tersedia
+  const visibleCategories = useMemo(() => {
+    return categories.filter(
+      (c) => c.active && menus.some((m) => m.categoryId === c.id && m.available)
+    );
+  }, [categories, menus]);
+
+  useEffect(() => {
+    if (
+      selectedCategoryId !== 'ALL' &&
+      !visibleCategories.some((c) => c.id === selectedCategoryId)
+    ) {
+      setSelectedCategoryId('ALL');
     }
-  }, [anonLoading, anonError]);
+  }, [visibleCategories, selectedCategoryId, setSelectedCategoryId]);
 
   // 4. Table parameter extraction from URL (?table=X)
   useEffect(() => {
@@ -152,7 +168,7 @@ export const MenuPage: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-base font-black text-stone-900 dark:text-white tracking-tight leading-none">
-                  {settings?.name || 'Smart Resto'}
+                  {restaurantName}
                 </h1>
                 <p className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 mt-0.5">
                   Pesan Mandiri Dari Meja
@@ -217,21 +233,19 @@ export const MenuPage: React.FC = () => {
             >
               Semua Menu
             </button>
-            {categories
-              .filter((c) => c.active)
-              .map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                    selectedCategoryId === cat.id
-                      ? 'bg-[#FF6B1A] text-white shadow-sm shadow-orange-500/20'
-                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+            {visibleCategories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategoryId(cat.id)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategoryId === cat.id
+                    ? 'bg-[#FF6B1A] text-white shadow-sm shadow-orange-500/20'
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
         </header>
 
@@ -308,15 +322,15 @@ export const MenuPage: React.FC = () => {
                 >
                   {/* Menu Image or Placeholder */}
                   <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-stone-100 dark:bg-stone-800 overflow-hidden shrink-0 relative flex items-center justify-center border border-stone-200 dark:border-stone-700">
-                    {imgSrc ? (
+                    {imgSrc && !brokenImageIds[menu.id] ? (
                       <img
                         src={imgSrc}
-                        alt={menu.name}
+                        alt=""
                         className="w-full h-full object-cover"
                         loading="lazy"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
+                        onError={() =>
+                          setBrokenImageIds((prev) => ({ ...prev, [menu.id]: true }))
+                        }
                       />
                     ) : (
                       <Utensils className="w-8 h-8 text-stone-300 dark:text-stone-600" />
@@ -454,11 +468,18 @@ export const MenuPage: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-20 h-20 rounded-2xl bg-stone-100 dark:bg-stone-800 overflow-hidden shrink-0 flex items-center justify-center border border-stone-200 dark:border-stone-700">
-                {selectedMenuItem.imageData || selectedMenuItem.imageUrl ? (
+                {(selectedMenuItem.imageData || selectedMenuItem.imageUrl) &&
+                !brokenImageIds[selectedMenuItem.id] ? (
                   <img
                     src={selectedMenuItem.imageData || selectedMenuItem.imageUrl}
-                    alt={selectedMenuItem.name}
+                    alt=""
                     className="w-full h-full object-cover"
+                    onError={() =>
+                      setBrokenImageIds((prev) => ({
+                        ...prev,
+                        [selectedMenuItem.id]: true,
+                      }))
+                    }
                   />
                 ) : (
                   <Utensils className="w-8 h-8 text-stone-300 dark:text-stone-600" />

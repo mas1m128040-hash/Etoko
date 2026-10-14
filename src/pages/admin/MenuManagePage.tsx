@@ -53,6 +53,12 @@ export const MenuManagePage: React.FC = () => {
   const [available, setAvailable] = useState(true);
   const [savingMenu, setSavingMenu] = useState(false);
 
+  // Quick Action after Category Created
+  const [lastCreatedCat, setLastCreatedCat] = useState<{ id: string; name: string } | null>(null);
+
+  // Broken image tracker for admin menu cards
+  const [brokenAdminImgIds, setBrokenAdminImgIds] = useState<Record<string, boolean>>({});
+
   // Delete Confirmation State
   const [menuToDelete, setMenuToDelete] = useState<Menu | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -65,15 +71,16 @@ export const MenuManagePage: React.FC = () => {
 
   // Seeding State
   const [seeding, setSeeding] = useState(false);
+  const [showSeedModal, setShowSeedModal] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleOpenMenuModal = (menu?: Menu) => {
+  const handleOpenMenuModal = (menu?: Menu, defaultCatId?: string) => {
     setImageError(null);
     if (menu) {
       setEditingMenu(menu);
       setName(menu.name);
-      setDescription(menu.description);
+      setDescription(menu.description || '');
       setPrice(menu.price);
       setCategoryId(menu.categoryId);
       setImageUrl(menu.imageUrl || '');
@@ -86,7 +93,8 @@ export const MenuManagePage: React.FC = () => {
       setName('');
       setDescription('');
       setPrice(20000);
-      setCategoryId(categories[0]?.id || '');
+      const fallbackCat = defaultCatId || (selectedCat !== 'ALL' ? selectedCat : (categories[0]?.id || ''));
+      setCategoryId(fallbackCat);
       setImageUrl('');
       setImageData(undefined);
       setImageTab('UPLOAD');
@@ -124,18 +132,26 @@ export const MenuManagePage: React.FC = () => {
 
   const handleSaveMenu = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      addToast('error', 'Nama menu tidak boleh kosong.');
+      return;
+    }
+    const finalPrice = Math.round(Number(price));
+    if (finalPrice <= 0) {
+      addToast('error', 'Harga menu harus berupa angka lebih besar dari 0.');
+      return;
+    }
     setSavingMenu(true);
     try {
       const menuPayload: Partial<Menu> = {
         name: name.trim(),
         description: description.trim(),
-        price: Number(price),
+        price: finalPrice,
         categoryId: categoryId || categories[0]?.id || '',
         imageUrl: imageUrl.trim() || undefined,
         imageData: imageData || undefined,
-        sortOrder: Number(sortOrder),
-        available,
+        sortOrder: Number(sortOrder) || 1,
+        available: Boolean(available),
       };
 
       if (editingMenu) {
@@ -147,7 +163,8 @@ export const MenuManagePage: React.FC = () => {
       }
       setShowMenuModal(false);
     } catch (err: any) {
-      addToast('error', err?.message || 'Gagal menyimpan menu.');
+      console.error('[Menu Save Error]', err);
+      addToast('error', err?.message || 'Gagal menyimpan menu ke Firestore.');
     } finally {
       setSavingMenu(false);
     }
@@ -184,11 +201,12 @@ export const MenuManagePage: React.FC = () => {
     if (!catName.trim()) return;
     setSavingCat(true);
     try {
-      await categoryService.createCategory({
+      const newCatId = await categoryService.createCategory({
         name: catName.trim(),
-        sortOrder: Number(catSortOrder),
+        sortOrder: Number(catSortOrder) || 1,
         active: true,
       });
+      setLastCreatedCat({ id: newCatId, name: catName.trim() });
       addToast('success', `Kategori "${catName}" ditambahkan.`);
       setShowCatModal(false);
       setCatName('');
@@ -200,7 +218,7 @@ export const MenuManagePage: React.FC = () => {
   };
 
   const handleSeedData = async () => {
-    if (!confirm('Isi basis data dengan 8 menu dan 3 kategori rekomendasi?')) return;
+    setShowSeedModal(false);
     setSeeding(true);
     try {
       const res = await seedService.seedInitialRestaurantData();
@@ -251,13 +269,46 @@ export const MenuManagePage: React.FC = () => {
             <Button
               variant="success"
               loading={seeding}
-              onClick={handleSeedData}
+              onClick={() => setShowSeedModal(true)}
               icon={<Sparkles className="w-4 h-4" />}
             >
               Isi Data Awal (Seed 8 Menu)
             </Button>
           )}
         </div>
+
+        {/* Quick Action Button setelah Admin Membuat Kategori */}
+        {lastCreatedCat && (
+          <div className="p-3.5 bg-orange-50 dark:bg-orange-950/40 border border-[#FF6B1A]/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-xs font-bold text-stone-900 dark:text-stone-100">
+              <Sparkles className="w-4 h-4 text-[#FF6B1A] shrink-0" />
+              <span>
+                Kategori <strong>"{lastCreatedCat.name}"</strong> berhasil ditambahkan.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  handleOpenMenuModal(undefined, lastCreatedCat.id);
+                  setLastCreatedCat(null);
+                }}
+                icon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Tambah menu ke kategori ini
+              </Button>
+              <button
+                type="button"
+                onClick={() => setLastCreatedCat(null)}
+                className="p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                aria-label="Tutup notifikasi"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filter and Search */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
@@ -338,12 +389,15 @@ export const MenuManagePage: React.FC = () => {
                   <div>
                     <div className="flex gap-3">
                       <div className="w-18 h-18 rounded-2xl bg-stone-100 dark:bg-stone-800 overflow-hidden shrink-0 flex items-center justify-center border border-stone-200 dark:border-stone-700">
-                        {imgSrc ? (
+                        {imgSrc && !brokenAdminImgIds[menu.id] ? (
                           <img
                             src={imgSrc}
-                            alt={menu.name}
+                            alt=""
                             loading="lazy"
                             className="w-full h-full object-cover"
+                            onError={() =>
+                              setBrokenAdminImgIds((prev) => ({ ...prev, [menu.id]: true }))
+                            }
                           />
                         ) : (
                           <Utensils className="w-7 h-7 text-stone-400" />
@@ -452,10 +506,11 @@ export const MenuManagePage: React.FC = () => {
               <input
                 type="number"
                 required
-                min={100}
-                step={500}
-                value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
+                min={1}
+                step={1}
+                value={price === 0 ? '' : price}
+                onChange={(e) => setPrice(e.target.value === '' ? 0 : Number(e.target.value))}
+                placeholder="Contoh: 12750"
                 className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
               />
             </div>
@@ -736,6 +791,48 @@ export const MenuManagePage: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Seed Confirmation Modal */}
+      <Modal
+        isOpen={showSeedModal}
+        onClose={() => setShowSeedModal(false)}
+        title="Konfirmasi Inisialisasi Data Awal (Seed Data)"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
+            <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Penjelasan Tindakan Seed Data:</p>
+              <p>
+                Fitur ini akan memuat 8 hidangan menu siap saji dan 3 kategori rekomendasi (Makanan, Minuman, Snack) ke dalam Firestore.
+              </p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                Data yang sudah ada tidak akan ditimpa atau dihapus. Pastikan koneksi internet stabil saat proses seed berjalan.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => setShowSeedModal(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              fullWidth
+              loading={seeding}
+              onClick={handleSeedData}
+            >
+              Ya, Muat Data Awal
+            </Button>
+          </div>
+        </div>
       </Modal>
     </AppShell>
   );
