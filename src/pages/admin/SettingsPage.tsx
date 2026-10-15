@@ -14,9 +14,12 @@ import {
   Mic,
   Music,
   Plus,
+  Minus,
   FileText,
+  Globe,
 } from 'lucide-react';
 import { settingsService } from '../../services/settingsService';
+import { orderService } from '../../services/orderService';
 import { seedService } from '../../services/seedService';
 import { audioEngine } from '../../lib/audioEngine';
 import { isValidQrisPayload } from '../../lib/qris';
@@ -27,7 +30,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
-import { Settings, AlarmTone, AlarmMode } from '../../types';
+import { Settings, AlarmTone, AlarmMode, Order } from '../../types';
 import { DEFAULT_SETTINGS, ALARM_TONE_LABELS, ALARM_MODE_LABELS } from '../../config/constants';
 import { formatRupiah, formatVoiceOrderText } from '../../lib/formatters';
 
@@ -45,6 +48,11 @@ export const SettingsPage: React.FC = () => {
   const [testingPaymentVoice, setTestingPaymentVoice] = useState(false);
   const [isSeeded, setIsSeeded] = useState<boolean>(true); // default true (sembunyikan bila koleksi menus berisi data)
   const [showSeedModal, setShowSeedModal] = useState<boolean>(false);
+
+  // State untuk pengelolaan meja dan proteksi pesanan aktif saat mengurangi meja
+  const originalTotalTablesRef = React.useRef<number>(20);
+  const [showReduceTableModal, setShowReduceTableModal] = useState<boolean>(false);
+  const [activeOrdersOnRemovedTables, setActiveOrdersOnRemovedTables] = useState<Order[]>([]);
 
   // Check speech synthesis support & Indonesian voice
   const hasSpeech = audioEngine.isSpeechSupported();
@@ -86,6 +94,12 @@ export const SettingsPage: React.FC = () => {
         settingsService.getSettings(),
         seedService.isDatabaseSeeded().catch(() => true),
       ]);
+      originalTotalTablesRef.current = s.totalTables || 20;
+      if (!s.appUrl && typeof window !== 'undefined') {
+        s.appUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`
+          .replace(/\/$/, '')
+          .replace(/#.*$/, '');
+      }
       setSettings(s);
       setIsSeeded(seeded);
     } catch (err: any) {
@@ -102,9 +116,40 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (settings.totalTables < 1 || settings.totalTables > 200) {
+      addToast('error', 'Jumlah meja harus antara 1 sampai 200.');
+      return;
+    }
+
+    // Jika jumlah meja dikurangi dari sebelumnya, periksa pesanan aktif
+    if (settings.totalTables < originalTotalTablesRef.current) {
+      const removedTables: string[] = [];
+      for (let i = settings.totalTables + 1; i <= originalTotalTablesRef.current; i++) {
+        removedTables.push(String(i));
+      }
+
+      try {
+        const activeOrders = await orderService.getActiveOrdersForTables(removedTables);
+        if (activeOrders.length > 0) {
+          setActiveOrdersOnRemovedTables(activeOrders);
+          setShowReduceTableModal(true);
+          return;
+        }
+      } catch (err) {
+        console.warn('Gagal memeriksa pesanan aktif pada meja yang dikurangi:', err);
+      }
+    }
+
+    await executeSave();
+  };
+
+  const executeSave = async () => {
     setSaving(true);
     try {
       await settingsService.updateSettings(settings);
+      originalTotalTablesRef.current = settings.totalTables;
+      setShowReduceTableModal(false);
+      setActiveOrdersOnRemovedTables([]);
       addToast('success', 'Pengaturan restoran & sistem suara berhasil disimpan.');
     } catch (err: any) {
       addToast('error', err?.message || 'Gagal menyimpan pengaturan.');
@@ -244,24 +289,56 @@ export const SettingsPage: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                  Jumlah Meja Pelanggan
+                  Jumlah Meja Pelanggan (1 - 200)
                 </label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={200}
-                  value={settings.totalTables}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      totalTables: Number(e.target.value),
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white"
-                />
-                <span className="text-[10px] text-stone-400">
-                  Untuk menu Cetak QR Meja
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        totalTables: Math.max(1, settings.totalTables - 1),
+                      })
+                    }
+                    disabled={settings.totalTables <= 1}
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:text-[#FF6B1A] border border-stone-200 dark:border-stone-700 disabled:opacity-40 transition-colors cursor-pointer"
+                    title="Kurangi 1 Meja"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={200}
+                    value={settings.totalTables}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        totalTables: Number(e.target.value),
+                      })
+                    }
+                    className="w-full text-center font-black font-mono text-base py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        totalTables: Math.min(200, settings.totalTables + 1),
+                      })
+                    }
+                    disabled={settings.totalTables >= 200}
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:text-[#FF6B1A] border border-stone-200 dark:border-stone-700 disabled:opacity-40 transition-colors cursor-pointer"
+                    title="Tambah 1 Meja"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <span className="text-[10px] text-stone-500 dark:text-stone-400 mt-1 block">
+                  Pilihan nomor meja di customer & menu Cetak QR
                 </span>
               </div>
 
@@ -283,9 +360,66 @@ export const SettingsPage: React.FC = () => {
                   }
                   className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white"
                 />
-                <span className="text-[10px] text-stone-400">
+                <span className="text-[10px] text-stone-500 dark:text-stone-400 mt-1 block">
                   Mencegah spam order dari meja yang sama
                 </span>
+              </div>
+
+              {/* Alamat Aplikasi (URL) untuk QR Meja */}
+              <div className="sm:col-span-3 pt-3 border-t border-stone-100 dark:border-stone-800">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 mb-1.5">
+                  <div>
+                    <label className="block font-bold text-stone-800 dark:text-stone-200">
+                      Alamat Aplikasi (URL) untuk Kode QR Meja
+                    </label>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                      Alamat domain web tempat aplikasi ini dihosting untuk dicetak pada stiker QR meja.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = `${window.location.protocol}//${window.location.host}${window.location.pathname}`
+                        .replace(/\/$/, '')
+                        .replace(/#.*$/, '');
+                      setSettings({ ...settings, appUrl: current });
+                      addToast('info', 'Alamat URL berhasil diisi dengan alamat saat ini.');
+                    }}
+                    className="text-xs font-bold text-[#FF6B1A] hover:underline cursor-pointer"
+                  >
+                    Gunakan Alamat Saat Ini
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Globe className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={settings.appUrl ?? ''}
+                    onChange={(e) => setSettings({ ...settings, appUrl: e.target.value })}
+                    placeholder="https://restoran-anda.vercel.app"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
+                  />
+                </div>
+
+                {/* Peringatan jika domain dev / internal AI Studio */}
+                {settings.appUrl && /aistudio|localhost|127\.0\.0\.1|ai\.studio/i.test(settings.appUrl) ? (
+                  <div className="mt-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      <strong>Peringatan Lingkungan Dev:</strong> Alamat ini mengandung <em>aistudio / localhost / ai.studio</em>. Kode QR yang dicetak menggunakan alamat ini tidak akan bisa dibuka pelanggan di luar jaringan internal. Gantilah dengan domain produksi publik Anda (misal: <code>https://nama-resto.vercel.app</code>) sebelum mencetak stiker QR meja.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1.5">
+                    QR Meja akan mengarahkan pelanggan ke:{' '}
+                    <code className="font-mono text-[#FF6B1A]">
+                      {settings.appUrl
+                        ? `${settings.appUrl.replace(/\/$/, '')}/#/menu?table=N`
+                        : '(belum diatur)'}
+                    </code>
+                  </p>
+                )}
               </div>
             </div>
           </Card>
@@ -887,6 +1021,63 @@ export const SettingsPage: React.FC = () => {
               onClick={handleSeedDatabase}
             >
               Ya, Muat Data Awal
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Peringatan Pengurangan Jumlah Meja Saat Masih Ada Pesanan Aktif */}
+      <Modal
+        isOpen={showReduceTableModal}
+        onClose={() => {
+          setShowReduceTableModal(false);
+          setActiveOrdersOnRemovedTables([]);
+        }}
+        title="Peringatan: Pesanan Aktif Pada Meja Yang Akan Dikurangi"
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <span>Ditemukan Pesanan Aktif Pada Meja Tersebut</span>
+            </div>
+            <p className="leading-relaxed">
+              Anda berencana mengurangi jumlah meja dari {originalTotalTablesRef.current} menjadi {settings.totalTables} meja. Terdapat <strong>{activeOrdersOnRemovedTables.length} pesanan aktif</strong> (status BARU / DITERIMA) pada meja yang akan dikurangi:
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeOrdersOnRemovedTables.map((order) => (
+                <span
+                  key={order.id}
+                  className="px-2.5 py-1 rounded-lg bg-amber-200 dark:bg-amber-900 font-bold text-amber-950 dark:text-amber-100 text-[11px]"
+                >
+                  Meja {order.tableNumber} (Order #{order.orderCode} - {order.customerName})
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+            <strong>Catatan Keamanan:</strong> Pesanan lama <em>tidak akan terhapus atau berubah</em>, dan riwayat transaksi tetap tersimpan utuh. Namun pelanggan tidak dapat lagi memilih meja tersebut untuk membuat pesanan baru.
+          </p>
+
+          <div className="flex justify-end gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                setShowReduceTableModal(false);
+                setActiveOrdersOnRemovedTables([]);
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              loading={saving}
+              onClick={executeSave}
+            >
+              Tetap Kurangi Meja & Simpan
             </Button>
           </div>
         </div>

@@ -1,16 +1,58 @@
 @import "tailwindcss";
 
+/* 
+ * KUNCI PERBAIKAN DARK MODE TAILWIND CSS v4:
+ * Secara default Tailwind v4 memakai media query @media (prefers-color-scheme: dark).
+ * @custom-variant dark memastikan varian 'dark:' bereaksi terhadap kelas '.dark' pada <html> atau elemen induk.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
+
+    /* Token Warna Semantik: Mode Terang */
+    --bg-app: #F5F5F4; /* Abu terang / Stone-100 halus */
+    --bg-surface: #FFFFFF; /* Kartu & header putih bersih */
+    --bg-subtle: #E7E5E4; /* Stone-200 */
+    --text-primary: #1C1917; /* Stone-900 hitam kontras tajam (WCAG AA) */
+    --text-secondary: #57534E; /* Stone-600 */
+    --text-muted: #78716C; /* Stone-500 */
+    --border-color: #E7E5E4; /* Stone-200 */
+    --border-subtle: #F5F5F4;
+    --color-primary: #FF6B1A;
+    --color-primary-hover: #E5530A;
+  }
+
+  .dark {
+    /* Token Warna Semantik: Mode Gelap */
+    --bg-app: #0D0D0D; /* Latar aplikasi gelap pekat */
+    --bg-surface: #171717; /* Kartu permukaan */
+    --bg-subtle: #262626; /* Elemen sekunder */
+    --text-primary: #FAFAFA; /* Teks putih tajam */
+    --text-secondary: #D6D3D1; /* Teks abu terang */
+    --text-muted: #A8A29E;
+    --border-color: #262626;
+    --border-subtle: #1F1F1F;
+    --color-primary: #FF6B1A;
+    --color-primary-hover: #E5530A;
+  }
+
+  html {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
   }
 
   body {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     font-family: var(--font-sans);
     -webkit-tap-highlight-color: transparent;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-top: env(safe-area-inset-top, 0px);
+    overflow-x: hidden;
+    width: 100%;
   }
 }
 
@@ -51,4 +93,40 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.5);
+}
+
+/* Hide scrollbar for clean horizontal tabs & chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Print Styles for A4 6-Cards Layout */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+  }
+
+  .print-grid-6-a4 {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(3, 1fr) !important;
+    gap: 12mm !important;
+    page-break-after: always;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 }

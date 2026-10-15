@@ -54,6 +54,27 @@ export const orderService = {
   },
 
   /**
+   * Cek apakah ada pesanan aktif (BARU / DITERIMA) pada meja-meja tertentu
+   */
+  async getActiveOrdersForTables(tableNumbers: string[]): Promise<Order[]> {
+    if (!tableNumbers || tableNumbers.length === 0) return [];
+    const dateKey = getDateKeyJakarta(new Date());
+    const q = query(
+      collection(db, ORDERS_COL),
+      where('dateKey', '==', dateKey)
+    );
+    const snap = await getDocs(q);
+    const targetSet = new Set(tableNumbers);
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as Order))
+      .filter(
+        (o) =>
+          targetSet.has(String(o.tableNumber)) &&
+          (o.status === 'BARU' || o.status === 'DITERIMA')
+      );
+  },
+
+  /**
    * Atomic checkout transaction on real Firestore:
    * 1. Cek pencegahan 1 pesanan belum lunas per customer
    * 2. Reads counters/{dateKey}

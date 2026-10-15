@@ -46,7 +46,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
-              className="lg:hidden p-2 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl"
+              className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl cursor-pointer"
               aria-label="Buka menu navigasi"
             >
               <MenuIcon className="w-5 h-5" />
@@ -117,7 +117,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 muteTemporarily(5); // mute 5 minutes
               }
             }}
-            className={`p-2 rounded-xl transition-colors ${
+            className={`min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl transition-colors cursor-pointer ${
               isMuted || !soundEnabled
                 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
                 : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'
@@ -139,8 +139,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors"
-            title="Ganti Tema Terang/Gelap"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
+            title={theme === 'dark' ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap'}
             aria-label="Ganti tema"
           >
             {theme === 'dark' ? (

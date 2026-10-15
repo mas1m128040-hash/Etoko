@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   totalTables: 20,
   timezone: TIMEZONE_JAKARTA,
   orderCooldownSeconds: 30,
+  appUrl: '',
   // Payment defaults
   qrisPayload: '',
   bankName: '',

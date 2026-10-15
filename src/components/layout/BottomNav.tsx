@@ -39,7 +39,7 @@ export const BottomNav: React.FC = () => {
             to={item.to}
             end={item.to === '/admin'}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all relative ${
+              `flex flex-col items-center justify-center min-h-[48px] py-1.5 px-3 rounded-xl transition-all relative ${
                 isActive
                   ? 'text-[#FF6B1A] font-bold'
                   : 'text-stone-500 dark:text-stone-400 hover:text-stone-800'

@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-lg"
+            className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-xl cursor-pointer"
             aria-label="Tutup navigasi"
           >
             <X className="w-5 h-5" />

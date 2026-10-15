@@ -99,6 +99,7 @@ export interface Settings {
   totalTables: number;
   timezone: string;
   orderCooldownSeconds: number;
+  appUrl?: string; // Alamat URL aplikasi aktif untuk QR Meja
   // Pengaturan Pembayaran
   qrisPayload?: string;
   bankName?: string;

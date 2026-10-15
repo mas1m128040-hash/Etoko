@@ -160,47 +160,77 @@ export const MenuPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-[#121212] text-stone-900 dark:text-stone-100 pb-36 antialiased selection:bg-orange-500 selection:text-white flex flex-col justify-between">
       <div>
-        {/* Top Header */}
+        {/* Top Header Responsif 2-Baris */}
         <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 shadow-xs">
-          <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#FF6B1A] flex items-center justify-center text-white shadow-sm shadow-orange-500/20">
+          {/* Baris 1: Logo & Nama Restoran (kiri) + Keranjang Cepat & Theme Toggle (kanan) */}
+          <div className="max-w-xl mx-auto px-4 pt-3 pb-1.5 flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-10 h-10 rounded-2xl bg-[#FF6B1A] flex items-center justify-center text-white shadow-sm shadow-orange-500/20 shrink-0">
                 <Utensils className="w-5 h-5" />
               </div>
-              <div>
-                <h1 className="text-base font-black text-stone-900 dark:text-white tracking-tight leading-none">
+              <div className="min-w-0 flex-1">
+                <h1
+                  className="text-sm sm:text-base font-black text-stone-900 dark:text-white tracking-tight leading-tight line-clamp-2"
+                  title={restaurantName}
+                >
                   {restaurantName}
                 </h1>
-                <p className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 mt-0.5">
+                <p className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 leading-none mt-0.5 truncate">
                   Pesan Mandiri Dari Meja
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Chip "Pesanan Saya" jika ada pesanan hari ini */}
-              {customerOrders.length > 0 && (
-                <Link
-                  to={`/order/${customerOrders[0].id}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+            <div className="flex items-center gap-1 shrink-0">
+              {totalQty > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsCartSheetOpen(true)}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center relative p-2 rounded-xl text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+                  aria-label="Lihat Keranjang"
                 >
-                  <Receipt className="w-3.5 h-3.5" />
-                  <span>Pesanan Saya ({customerOrders.length})</span>
-                </Link>
+                  <ShoppingCart className="w-5 h-5 text-[#FF6B1A]" />
+                  <span className="absolute top-1 right-1 px-1.5 py-0.2 text-[10px] font-black rounded-full bg-[#FF6B1A] text-white">
+                    {totalQty}
+                  </span>
+                </button>
               )}
-
-              {/* Table Number Pill */}
-              <button
-                onClick={() => setShowTableModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/20 text-[#FF6B1A] text-xs font-black cursor-pointer hover:bg-orange-500/20 transition-colors"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>{tableNumber ? `Meja ${tableNumber}` : 'Pilih Meja'}</span>
-              </button>
-
-              {/* Tombol Tema Terang / Gelap */}
-              <ThemeToggle />
+              <ThemeToggle className="min-h-[44px] min-w-[44px] flex items-center justify-center" />
             </div>
+          </div>
+
+          {/* Baris 2: Chip "Meja N" dan "Pesanan Saya" (Sejajar, Rapi, Dapat Digeser) */}
+          <div className="max-w-xl mx-auto px-4 pb-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {/* Table Number Pill */}
+            <button
+              onClick={() => setShowTableModal(true)}
+              className="min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/20 text-[#FF6B1A] text-xs font-black cursor-pointer hover:bg-orange-500/20 transition-colors shrink-0"
+            >
+              <MapPin className="w-4 h-4 shrink-0" />
+              <span>{tableNumber ? `Meja ${tableNumber}` : 'Pilih Meja'}</span>
+            </button>
+
+            {/* Chip "Pesanan Saya" jika ada pesanan */}
+            {customerOrders.length > 0 && (
+              <Link
+                to={`/order/${customerOrders[0].id}`}
+                className="min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shrink-0"
+              >
+                <Receipt className="w-4 h-4 shrink-0" />
+                <span>Pesanan Saya ({customerOrders.length})</span>
+              </Link>
+            )}
+
+            {/* Chip tagihan belum lunas jika ada */}
+            {activeUnpaidOrder && (
+              <Link
+                to={`/order/${activeUnpaidOrder.id}`}
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-black shrink-0 hover:bg-amber-500/25 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span>Belum Lunas (#{activeUnpaidOrder.orderCode})</span>
+              </Link>
+            )}
           </div>
 
           {/* Search Bar */}
