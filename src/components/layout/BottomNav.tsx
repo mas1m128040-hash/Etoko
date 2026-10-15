@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Utensils, QrCode, Settings } from 'lucide-react';
+import { LayoutDashboard, Utensils, QrCode, Settings, BarChart3 } from 'lucide-react';
 import { useNewOrderAlarm } from '../../hooks/useNewOrderAlarm';
 
 export const BottomNav: React.FC = () => {
@@ -17,6 +17,11 @@ export const BottomNav: React.FC = () => {
       to: '/admin/menus',
       label: 'Menu',
       icon: <Utensils className="w-5 h-5" />,
+    },
+    {
+      to: '/admin/reports',
+      label: 'Laporan',
+      icon: <BarChart3 className="w-5 h-5" />,
     },
     {
       to: '/admin/qr',

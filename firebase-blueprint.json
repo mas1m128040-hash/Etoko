@@ -123,6 +123,25 @@
         "alarmVoiceText": { "type": "string" }
       },
       "required": ["name", "totalTables", "timezone", "orderCooldownSeconds"]
+    },
+    "DailyStats": {
+      "title": "DailyStats",
+      "description": "Statistik dan rekapitulasi penjualan harian restoran",
+      "type": "object",
+      "properties": {
+        "dateKey": { "type": "string", "maxLength": 20 },
+        "orderCount": { "type": "number" },
+        "paidCount": { "type": "number" },
+        "revenue": { "type": "number" },
+        "cashIn": { "type": "number" },
+        "byMethod": { "type": "object" },
+        "cancelledCount": { "type": "number" },
+        "unpaidCount": { "type": "number" },
+        "unpaidAmount": { "type": "number" },
+        "topItems": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dateKey", "orderCount", "paidCount", "revenue", "cashIn", "byMethod"]
     }
   },
   "firestore": {
@@ -149,6 +168,10 @@
     "/settings/{settingId}": {
       "schema": "Settings",
       "description": "Konfigurasi operasional restoran"
+    },
+    "/dailyStats/{dateKey}": {
+      "schema": "DailyStats",
+      "description": "Rekapitulasi penjualan harian restoran"
     }
   }
 }

@@ -589,7 +589,7 @@ export const CheckoutPage: React.FC = () => {
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-xs mt-1 mb-6">
           Silakan pilih menu makanan dan minuman terlebih dahulu sebelum checkout.
         </p>
-        <Link to="/menu">
+        <Link to={tableNumber ? `/menu?table=${tableNumber}` : '/menu'}>
           <Button variant="primary">Kembali ke Daftar Menu</Button>
         </Link>
       </div>
@@ -720,7 +720,7 @@ export const CheckoutPage: React.FC = () => {
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 py-3 shadow-xs">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <Link
-            to="/menu"
+            to={tableNumber ? `/menu?table=${tableNumber}` : '/menu'}
             className="flex items-center gap-2 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white text-sm font-bold"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -777,7 +777,7 @@ export const CheckoutPage: React.FC = () => {
                   <span>Meja {tableNumber || '-'}</span>
                 </div>
                 <Link
-                  to="/menu"
+                  to={tableNumber ? `/menu?table=${tableNumber}` : '/menu'}
                   className="text-xs font-bold text-[#FF6B1A] underline px-2"
                 >
                   Ubah
@@ -913,7 +913,10 @@ export const CheckoutPage: React.FC = () => {
           <Card className="p-4 sm:p-5 space-y-3 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-sm">
             <h3 className="text-sm font-black text-stone-900 dark:text-white uppercase tracking-wider flex items-center justify-between">
               <span>RINGKASAN MENU ({totalQty} ITEM)</span>
-              <Link to="/menu" className="text-xs text-[#FF6B1A] font-bold">
+              <Link
+                to={tableNumber ? `/menu?table=${tableNumber}` : '/menu'}
+                className="text-xs text-[#FF6B1A] font-bold"
+              >
                 Tambah Menu
               </Link>
             </h3>

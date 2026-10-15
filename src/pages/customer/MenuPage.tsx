@@ -45,6 +45,7 @@ export const MenuPage: React.FC = () => {
     totalPrice,
     tableNumber,
     setTableNumber,
+    clearCart,
   } = useCart();
 
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -54,9 +55,9 @@ export const MenuPage: React.FC = () => {
   const [itemQtyInput, setItemQtyInput] = useState(1);
   const [showTableModal, setShowTableModal] = useState(false);
 
-  // Customer orders hook (untuk chip Pesanan Saya)
+  // Customer orders hook: hanya menampilkan pesanan aktif untuk meja aktif pelanggan
   const currentUid = auth.currentUser?.uid;
-  const { orders: customerOrders } = useCustomerOrders(currentUid);
+  const { orders: customerOrders } = useCustomerOrders(currentUid, tableNumber);
   const activeUnpaidOrder = customerOrders.find(
     (o) => o.paymentStatus === 'BELUM_BAYAR' && o.status !== 'DIBATALKAN'
   );
@@ -118,15 +119,22 @@ export const MenuPage: React.FC = () => {
     }
   }, [visibleCategories, selectedCategoryId, setSelectedCategoryId]);
 
-  // 4. Table parameter extraction from URL (?table=X)
+  // 4. Sumber kebenaran nomor meja adalah parameter meja pada URL QR.
+  // Setiap aplikasi dibuka dengan parameter meja, nomor meja aktif DIGANTI dengan nilai itu.
+  // Saat parameter meja berbeda dari meja yang tersimpan di perangkat, bersihkan referensi pesanan & keranjang untuk meja lain.
   useEffect(() => {
     const tableParam = searchParams.get('table');
     if (tableParam) {
+      const storedTable = localStorage.getItem('smart_resto_table_number');
+      if (storedTable && storedTable !== tableParam) {
+        clearCart();
+        localStorage.removeItem('smart_resto_active_order_id');
+      }
       setTableNumber(tableParam);
     } else if (!tableNumber) {
       setShowTableModal(true);
     }
-  }, [searchParams, tableNumber, setTableNumber]);
+  }, [searchParams, tableNumber, setTableNumber, clearCart]);
 
   const handleOpenItemDetail = (menu: Menu) => {
     if (!menu.available) return;

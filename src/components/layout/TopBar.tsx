@@ -23,6 +23,13 @@ interface TopBarProps {
   wakeLockActive?: boolean;
 }
 
+function abbreviateStaffName(fullName: string): string {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) return parts[0];
+  return `${parts[0]} ${parts[1][0]}.`;
+}
+
 export const TopBar: React.FC<TopBarProps> = ({
   onToggleSidebar,
   title,
@@ -68,10 +75,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Right: Status Indicators & Quick Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Firestore Online/Offline Status Indicator */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* Firestore Online/Offline Status Indicator (Titik warna di mobile, label di layar lebar) */}
           <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+            className={`flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-semibold ${
               isOnline
                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                 : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 animate-pulse'
@@ -82,19 +89,14 @@ export const TopBar: React.FC<TopBarProps> = ({
                 : 'Koneksi Firestore terputus (Offline)'
             }
           >
-            {isOnline ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <Wifi className="w-3.5 h-3.5" />
-                <span className="font-bold">Firestore: Online</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-                <WifiOff className="w-3.5 h-3.5" />
-                <span className="font-bold">Firestore: Offline</span>
-              </>
-            )}
+            <span
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+              }`}
+            />
+            <span className="hidden sm:inline font-bold">
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
           </div>
 
           {/* Screen WakeLock Indicator */}
@@ -152,19 +154,20 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Staff Profile & Logout */}
           {profile && (
-            <div className="flex items-center gap-2 pl-2 border-l border-stone-200 dark:border-stone-800">
-              <div className="hidden sm:block text-right">
-                <p className="text-xs font-bold text-stone-900 dark:text-stone-100 leading-none">
-                  {profile.name}
+            <div className="flex items-center gap-1 sm:gap-2 pl-1 sm:pl-2 border-l border-stone-200 dark:border-stone-800">
+              <div className="text-right">
+                <p className="text-xs font-bold text-stone-900 dark:text-stone-100 leading-none truncate max-w-[70px] sm:max-w-none">
+                  <span className="sm:hidden">{abbreviateStaffName(profile.name)}</span>
+                  <span className="hidden sm:inline">{profile.name}</span>
                 </p>
-                <span className="text-[10px] font-semibold text-[#FF6B1A] uppercase tracking-wider">
+                <span className="hidden sm:block text-[10px] font-semibold text-[#FF6B1A] uppercase tracking-wider mt-0.5">
                   {USER_ROLE_LABELS[profile.role]}
                 </span>
               </div>
 
               <button
                 onClick={signOut}
-                className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
                 title="Keluar (Logout)"
                 aria-label="Keluar"
               >

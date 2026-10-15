@@ -5,6 +5,7 @@ import {
   Utensils,
   Settings as SettingsIcon,
   QrCode,
+  BarChart3,
   ExternalLink,
   X,
 } from 'lucide-react';
@@ -32,6 +33,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       to: '/admin/menus',
       label: 'Kelola Menu',
       icon: <Utensils className="w-5 h-5" />,
+    },
+    {
+      to: '/admin/reports',
+      label: 'Laporan',
+      icon: <BarChart3 className="w-5 h-5" />,
     },
     {
       to: '/admin/qr',

@@ -119,3 +119,22 @@ export interface Settings {
 export interface CartItem extends OrderItem {
   maxQty?: number;
 }
+
+export interface DailyStats {
+  id?: string;
+  dateKey: string; // "YYYY-MM-DD"
+  orderCount: number;
+  paidCount: number;
+  revenue: number; // total totalPrice pesanan LUNAS (tanpa kode unik)
+  cashIn: number; // total payableAmount pesanan LUNAS
+  byMethod: {
+    TUNAI: number;
+    QRIS: number;
+    TRANSFER: number;
+  };
+  cancelledCount: number;
+  unpaidCount: number;
+  unpaidAmount: number;
+  topItems: Record<string, number>; // nama menu -> qty terjual
+  updatedAt?: any;
+}

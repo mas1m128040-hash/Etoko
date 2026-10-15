@@ -12,6 +12,7 @@ import { DashboardPage } from '../pages/admin/DashboardPage';
 import { MenuManagePage } from '../pages/admin/MenuManagePage';
 import { SettingsPage } from '../pages/admin/SettingsPage';
 import { TableQrPage } from '../pages/admin/TableQrPage';
+import { ReportsPage } from '../pages/admin/ReportsPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -39,6 +40,14 @@ export const AppRoutes: React.FC = () => {
         element={
           <RouteGuard allowedRoles={['ADMIN']}>
             <MenuManagePage />
+          </RouteGuard>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <RouteGuard allowedRoles={['ADMIN']}>
+            <ReportsPage />
           </RouteGuard>
         }
       />

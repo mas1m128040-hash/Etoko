@@ -223,6 +223,12 @@ export const OrderStatusPage: React.FC = () => {
     );
   }
 
+  const activeTableNumber =
+    localStorage.getItem('smart_resto_table_number') || order?.tableNumber || '';
+  const backToMenuUrl = activeTableNumber
+    ? `/menu?table=${activeTableNumber}`
+    : '/menu';
+
   if (error || !order) {
     return (
       <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
@@ -235,11 +241,55 @@ export const OrderStatusPage: React.FC = () => {
         <p className="text-xs text-stone-500 max-w-xs mt-1 mb-6">
           {error || 'Data pesanan tidak dapat diakses atau telah dihapus.'}
         </p>
-        <Button variant="primary" onClick={() => navigate('/menu')}>
+        <Button variant="primary" onClick={() => navigate(backToMenuUrl)}>
           Kembali ke Daftar Menu
         </Button>
       </div>
     );
+  }
+
+  // Cek masa simpan tampilan pelanggan:
+  // Pesanan SELESAI atau DIBATALKAN tetap terlihat di halaman statusnya selama 10 menit sejak completedAt atau cancelledAt, lalu hilang dari sisi customer.
+  const currentUid = auth.currentUser?.uid;
+  const isCustomerOwner = currentUid && order.customerUid === currentUid;
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+  if (isCustomerOwner && (order.status === 'SELESAI' || order.status === 'DIBATALKAN')) {
+    const endMs =
+      order.status === 'SELESAI'
+        ? order.completedAt?.toMillis
+          ? order.completedAt.toMillis()
+          : order.completedAt?.seconds
+          ? order.completedAt.seconds * 1000
+          : order.updatedAt?.toMillis
+          ? order.updatedAt.toMillis()
+          : null
+        : order.cancelledAt?.toMillis
+        ? order.cancelledAt.toMillis()
+        : order.cancelledAt?.seconds
+        ? order.cancelledAt.seconds * 1000
+        : order.updatedAt?.toMillis
+        ? order.updatedAt.toMillis()
+        : null;
+
+    if (endMs && Date.now() - endMs > TEN_MINUTES_MS) {
+      return (
+        <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+            Sesi Pesanan Telah Berakhir
+          </h2>
+          <p className="text-xs text-stone-500 max-w-xs mt-1 mb-6">
+            Pesanan #{order.orderCode} telah {order.status === 'SELESAI' ? 'selesai' : 'dibatalkan'} lebih dari 10 menit yang lalu. Seluruh riwayat transaksi tetap tersimpan utuh di sistem restoran.
+          </p>
+          <Button variant="primary" onClick={() => navigate(backToMenuUrl)}>
+            Kembali ke Daftar Menu {activeTableNumber ? `(Meja ${activeTableNumber})` : ''}
+          </Button>
+        </div>
+      );
+    }
   }
 
   // Tahap status (Hanya 3 tahap customer):
@@ -257,7 +307,7 @@ export const OrderStatusPage: React.FC = () => {
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 py-2.5 shadow-xs">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <Link
-            to={`/menu?table=${order.tableNumber}`}
+            to={backToMenuUrl}
             className="flex items-center gap-1.5 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white text-xs font-bold"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -684,7 +734,7 @@ export const OrderStatusPage: React.FC = () => {
             variant="outline"
             size="lg"
             fullWidth
-            onClick={() => navigate(`/menu?table=${order.tableNumber}`)}
+            onClick={() => navigate(backToMenuUrl)}
           >
             Kembali ke Daftar Menu
           </Button>
@@ -695,7 +745,7 @@ export const OrderStatusPage: React.FC = () => {
               variant="primary"
               size="lg"
               fullWidth
-              onClick={() => navigate(`/menu?table=${order.tableNumber}`)}
+              onClick={() => navigate(backToMenuUrl)}
               icon={<PlusCircle className="w-5 h-5" />}
             >
               Pesan Menu Lainnya

@@ -139,23 +139,23 @@ export const DashboardPage: React.FC = () => {
     return priority(a.status) - priority(b.status);
   });
 
+  // Filter chips: Aktif, Belum Bayar, Selesai, Dibatalkan, Semua
   const filterOptions: { key: string; label: string; count: number }[] = [
-    { key: 'ALL', label: 'Semua', count: stats.total },
+    { key: 'AKTIF', label: 'Aktif', count: stats.aktif },
     { key: 'BELUM_BAYAR', label: 'Belum Bayar', count: stats.belumLunasCount },
-    { key: 'BARU', label: 'Baru', count: stats.baru },
-    { key: 'DITERIMA', label: 'Diterima', count: stats.diterima },
     { key: 'SELESAI', label: 'Selesai', count: stats.selesai },
     { key: 'DIBATALKAN', label: 'Dibatalkan', count: stats.dibatalkan },
+    { key: 'ALL', label: 'Semua', count: stats.total },
   ];
 
   return (
     <AppShell title="DASHBOARD RESTORAN (POS)">
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Seed Database Banner for Admin if categories/menus are empty */}
         {profile?.role === 'ADMIN' &&
           !menusLoading &&
           (menus.length === 0 || categories.length === 0) && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-500 shrink-0">
                   <Sparkles className="w-5 h-5" />
@@ -175,7 +175,7 @@ export const DashboardPage: React.FC = () => {
                 loading={seeding}
                 onClick={handleSeedData}
                 icon={<Plus className="w-4 h-4" />}
-                className="shrink-0"
+                className="shrink-0 min-h-[44px]"
               >
                 Isi Data Contoh
               </Button>
@@ -192,28 +192,28 @@ export const DashboardPage: React.FC = () => {
         )}
 
         {/* 6 Metric Cards Row: Total Hari Ini, Belum Lunas, Tidak Bayar, Baru, Diterima, Selesai */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          <Card className="p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+          <Card className="p-3 sm:p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-stone-600 dark:text-stone-400">
+              <span className="text-[10px] sm:text-[11px] font-bold text-stone-600 dark:text-stone-400">
                 TOTAL ORDER
               </span>
-              <Utensils className="w-4 h-4 text-stone-400" />
+              <Utensils className="w-3.5 h-3.5 text-stone-400" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-stone-900 dark:text-white mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-stone-900 dark:text-white mt-1">
               {stats.total}
             </p>
-            <p className="text-[10px] text-stone-400 mt-0.5">Semua status</p>
+            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Semua status</p>
           </Card>
 
-          <Card className="p-4 bg-red-500/10 border-red-500/20">
+          <Card className="p-3 sm:p-3.5 bg-red-500/10 border-red-500/20">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-red-600 dark:text-red-400">
+              <span className="text-[10px] sm:text-[11px] font-bold text-red-600 dark:text-red-400">
                 BELUM LUNAS
               </span>
-              <CreditCard className="w-4 h-4 text-red-500" />
+              <CreditCard className="w-3.5 h-3.5 text-red-500" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-red-600 dark:text-red-400 mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-red-600 dark:text-red-400 mt-1">
               {stats.belumLunasCount}
             </p>
             <p className="text-[10px] font-mono text-red-700 dark:text-red-300 truncate mt-0.5">
@@ -221,70 +221,69 @@ export const DashboardPage: React.FC = () => {
             </p>
           </Card>
 
-          <Card className="p-4 bg-stone-500/10 border-stone-500/20">
+          <Card className="p-3 sm:p-3.5 bg-stone-500/10 border-stone-500/20">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-stone-600 dark:text-stone-400">
+              <span className="text-[10px] sm:text-[11px] font-bold text-stone-600 dark:text-stone-400">
                 TIDAK BAYAR
               </span>
-              <AlertTriangle className="w-4 h-4 text-stone-400" />
+              <AlertTriangle className="w-3.5 h-3.5 text-stone-400" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-stone-700 dark:text-stone-300 mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-stone-700 dark:text-stone-300 mt-1">
               {stats.tidakBayarHariIni}
             </p>
-            <p className="text-[10px] text-stone-400 mt-0.5">Dibatalkan</p>
+            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Dibatalkan</p>
           </Card>
 
-          <Card className="p-4 bg-orange-500/10 border-orange-500/20">
+          <Card className="p-3 sm:p-3.5 bg-orange-500/10 border-orange-500/20">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#FF6B1A]">BARU</span>
-              <Bell className="w-4 h-4 text-[#FF6B1A] animate-bounce" />
+              <span className="text-[10px] sm:text-[11px] font-bold text-[#FF6B1A]">BARU</span>
+              <Bell className="w-3.5 h-3.5 text-[#FF6B1A] animate-bounce" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-[#FF6B1A] mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-[#FF6B1A] mt-1">
               {stats.baru}
             </p>
-            <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-0.5">
+            <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-0.5 truncate">
               Konfirmasi
             </p>
           </Card>
 
-          <Card className="p-4 bg-blue-500/10 border-blue-500/20">
+          <Card className="p-3 sm:p-3.5 bg-blue-500/10 border-blue-500/20">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+              <span className="text-[10px] sm:text-[11px] font-bold text-blue-600 dark:text-blue-400">
                 DITERIMA
               </span>
-              <Utensils className="w-4 h-4 text-blue-500" />
+              <Utensils className="w-3.5 h-3.5 text-blue-500" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-blue-600 dark:text-blue-400 mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-blue-600 dark:text-blue-400 mt-1">
               {stats.diterima}
             </p>
-            <p className="text-[10px] text-stone-400 mt-0.5">
-              Disiapkan
-            </p>
+            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Disiapkan</p>
           </Card>
 
-          <Card className="p-4 bg-emerald-500/10 border-emerald-500/20">
+          <Card className="p-3 sm:p-3.5 bg-emerald-500/10 border-emerald-500/20">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                 SELESAI
               </span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1.5">
+            <p className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
               {stats.selesai}
             </p>
-            <p className="text-[10px] text-stone-400 mt-0.5">Tuntas</p>
+            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Tuntas</p>
           </Card>
         </div>
 
-        {/* Filter Chips, Action Selesaikan Semua, & Search Bar */}
+        {/* Filter Chips & Search Bar */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-          {/* Status Filter Chips */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+          {/* Status Filter Chips yang bisa digeser + Tombol Selesaikan Lunas */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
             {filterOptions.map((opt) => (
               <button
                 key={opt.key}
+                type="button"
                 onClick={() => setStatusFilter(opt.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap min-h-[44px] transition-all cursor-pointer flex items-center shrink-0 ${
                   statusFilter === opt.key
                     ? 'bg-[#FF6B1A] text-white shadow-sm shadow-orange-500/20'
                     : 'bg-stone-200/70 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-300 dark:hover:bg-stone-700'
@@ -294,43 +293,41 @@ export const DashboardPage: React.FC = () => {
                 <span className="ml-1.5 opacity-80 font-mono">({opt.count})</span>
               </button>
             ))}
+
+            {/* Tombol Selesaikan Lunas inline dengan ukuran yang sama */}
+            {readyToCompleteCount > 0 && (
+              <button
+                type="button"
+                disabled={completingAll}
+                onClick={handleSelesaikanSemua}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                title="Selesaikan semua pesanan berstatus DITERIMA yang sudah LUNAS"
+              >
+                <CheckCheck className="w-4 h-4 shrink-0" />
+                <span>Selesaikan Lunas ({readyToCompleteCount})</span>
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Tombol Selesaikan Semua untuk pesanan DITERIMA yang sudah lunas */}
-            {readyToCompleteCount > 0 && (
-              <Button
-                variant="success"
-                size="sm"
-                loading={completingAll}
-                onClick={handleSelesaikanSemua}
-                icon={<CheckCheck className="w-4 h-4" />}
-                className="whitespace-nowrap"
-              >
-                Selesaikan Lunas ({readyToCompleteCount})
-              </Button>
-            )}
-
-            {/* Search Box */}
-            <div className="relative min-w-[200px] flex-1 sm:flex-none">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari order, meja, atau nama..."
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-stone-900 rounded-xl text-xs border border-stone-200 dark:border-stone-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B1A] text-stone-900 dark:text-white"
-              />
-            </div>
+          {/* Search Box */}
+          <div className="relative min-w-[200px] flex-1 sm:flex-none">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari order, meja, atau nama..."
+              className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-stone-900 rounded-xl text-xs border border-stone-200 dark:border-stone-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B1A] text-stone-900 dark:text-white min-h-[44px]"
+            />
           </div>
         </div>
 
-        {/* Order Cards Grid */}
+        {/* Order Cards Grid: Kolom otomatis dengan lebar minimum sekitar 280px */}
         {ordersLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            <div className="h-64 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
-            <div className="h-64 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
-            <div className="h-64 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 sm:gap-4">
+            <div className="h-56 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
+            <div className="h-56 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
+            <div className="h-56 bg-stone-200 dark:bg-stone-800 rounded-2xl animate-pulse" />
           </div>
         ) : ordersError ? (
           <FirebaseErrorCard
@@ -345,7 +342,7 @@ export const DashboardPage: React.FC = () => {
             description="Belum ada pesanan yang sesuai dengan filter atau pencarian saat ini."
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 sm:gap-4">
             {sortedOrders.map((order) => (
               <OrderCard
                 key={order.id}

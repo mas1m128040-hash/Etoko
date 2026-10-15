@@ -94,5 +94,10 @@ service cloud.firestore {
       // Dilarang menghapus riwayat order
       allow delete: if false;
     }
+
+    // Koleksi dailyStats: Rekapitulasi penjualan harian (Hanya Admin aktif)
+    match /dailyStats/{dateKey} {
+      allow read, write: if isAdmin();
+    }
   }
 }
