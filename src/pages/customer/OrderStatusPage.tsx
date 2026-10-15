@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import {
@@ -28,6 +28,8 @@ import { formatRupiah, formatDateTimeJakarta, formatTimeJakarta } from '../../li
 import { generateDynamicQris } from '../../lib/qris';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ThemeToggle } from '../../components/layout/ThemeToggle';
+import { audioEngine } from '../../lib/audioEngine';
 
 export const OrderStatusPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -43,6 +45,8 @@ export const OrderStatusPage: React.FC = () => {
   const [dynamicQrUrl, setDynamicQrUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(true);
+  const prevPaymentStatusRef = useRef<string | undefined>(undefined);
 
   // 1. Ensure anonymous session
   useEffect(() => {
@@ -59,7 +63,7 @@ export const OrderStatusPage: React.FC = () => {
       .catch((err) => console.warn('Gagal memuat pengaturan:', err));
   }, []);
 
-  // 3. Subscribe to real-time order status
+  // 3. Subscribe to real-time order status (onSnapshot)
   useEffect(() => {
     if (!orderId) {
       setError('ID pesanan tidak valid.');
@@ -67,9 +71,22 @@ export const OrderStatusPage: React.FC = () => {
       return;
     }
 
+    setIsRealtimeConnected(true);
     const unsubscribe = orderService.subscribeSingleOrder(
       orderId,
       (fetchedOrder) => {
+        setIsRealtimeConnected(true);
+        if (
+          prevPaymentStatusRef.current === 'BELUM_BAYAR' &&
+          fetchedOrder?.paymentStatus === 'LUNAS'
+        ) {
+          // Putar chime merdu + getar singkat bila pembayaran dikonfirmasi LUNAS oleh admin
+          audioEngine.playPaymentSuccessChime();
+        }
+        if (fetchedOrder) {
+          prevPaymentStatusRef.current = fetchedOrder.paymentStatus;
+        }
+
         setOrder(fetchedOrder);
         setLoading(false);
         if (!fetchedOrder) {
@@ -78,12 +95,22 @@ export const OrderStatusPage: React.FC = () => {
       },
       (err) => {
         console.error('Error fetching order:', err);
+        setIsRealtimeConnected(false);
         setError('Gagal memuat status pesanan. Pastikan koneksi internet aktif.');
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    const handleOnline = () => setIsRealtimeConnected(true);
+    const handleOffline = () => setIsRealtimeConnected(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [orderId]);
 
   // 4. Generate dynamic QRIS if payment method is QRIS and order is unpaid
@@ -227,18 +254,40 @@ export const OrderStatusPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-[#121212] text-stone-900 dark:text-stone-100 pb-20 antialiased">
       {/* Top Header */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 py-3 shadow-xs">
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 py-2.5 shadow-xs">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <Link
             to={`/menu?table=${order.tableNumber}`}
-            className="flex items-center gap-2 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white text-sm font-bold"
+            className="flex items-center gap-1.5 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white text-xs font-bold"
           >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Kembali ke Menu</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span>Menu</span>
           </Link>
-          <span className="text-sm font-black text-stone-900 dark:text-white">
-            Status Pesanan #{order.orderCode}
-          </span>
+
+          {/* Penanda Realtime Connection */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+              isRealtimeConnected
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+            }`}
+            title={
+              isRealtimeConnected
+                ? 'Terhubung langsung ke database pesanan secara realtime'
+                : 'Koneksi terputus, mencoba memperbarui...'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isRealtimeConnected
+                  ? 'bg-emerald-500 animate-pulse'
+                  : 'bg-amber-500 animate-ping'
+              }`}
+            />
+            <span>{isRealtimeConnected ? 'Terhubung langsung' : 'Memperbarui...'}</span>
+          </div>
+
+          <ThemeToggle />
         </div>
       </header>
 
@@ -372,200 +421,208 @@ export const OrderStatusPage: React.FC = () => {
           )}
         </Card>
 
-        {/* Payment Information Card */}
-        <Card className="p-5 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-[#FF6B1A]" />
-              <h3 className="text-sm font-bold text-stone-900 dark:text-white uppercase tracking-wider">
-                Status Pembayaran
-              </h3>
-            </div>
+        {/* Payment Information Card (Hanya jika pesanan tidak dibatalkan) */}
+        {!isCancelled && (
+          <Card className="p-5 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-[#FF6B1A]" />
+                <h3 className="text-sm font-bold text-stone-900 dark:text-white uppercase tracking-wider">
+                  Status Pembayaran
+                </h3>
+              </div>
 
-            {order.paymentStatus === 'LUNAS' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black">
-                <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>LUNAS</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-black">
-                <Clock className="w-3.5 h-3.5" />
-                <span>MENUNGGU PEMBAYARAN</span>
-              </span>
-            )}
-          </div>
-
-          {/* Payment Method Specific Content */}
-          {order.paymentStatus === 'LUNAS' ? (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-2xl text-center space-y-1">
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
-                Pembayaran telah dikonfirmasi lunas
-              </p>
-              <p className="text-2xl font-black font-mono text-emerald-800 dark:text-emerald-300">
-                {formatRupiah(payable)}
-              </p>
-              <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                Metode: {order.paidMethodFinal || order.paymentMethod}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Timeout countdown if exists */}
-              {timeLeftSeconds !== null && timeLeftSeconds > 0 && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-2xl flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-amber-600" />
-                    <span>Batas Waktu Pembayaran:</span>
-                  </div>
-                  <span className="font-mono text-sm font-black text-amber-700 dark:text-amber-300">
-                    {formatCountdown(timeLeftSeconds)}
-                  </span>
-                </div>
-              )}
-
-              {/* QRIS Method */}
-              {order.paymentMethod === 'QRIS' && (
-                <div className="space-y-3 text-center">
-                  <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 flex flex-col items-center">
-                    <p className="text-xs font-bold text-stone-600 dark:text-stone-300 mb-3">
-                      Pindai QRIS Dinamis Berikut Melalui Aplikasi M-Banking / E-Wallet Anda:
-                    </p>
-
-                    {dynamicQrUrl ? (
-                      <div className="p-3 bg-white rounded-2xl shadow-sm border border-stone-200 max-w-[240px]">
-                        <img
-                          src={dynamicQrUrl}
-                          alt="QRIS Dinamis Pembayaran"
-                          className="w-full h-auto aspect-square"
-                        />
-                      </div>
-                    ) : qrError ? (
-                      <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold">
-                        {qrError}
-                      </div>
-                    ) : (
-                      <div className="w-48 h-48 rounded-xl bg-stone-200 dark:bg-stone-800 animate-pulse flex items-center justify-center">
-                        <QrCode className="w-10 h-10 text-stone-400" />
-                      </div>
-                    )}
-
-                    <div className="mt-4 space-y-1">
-                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                        Total yang Harus Dibayar:
-                      </p>
-                      <p className="text-3xl font-black font-mono text-[#FF6B1A]">
-                        {formatRupiah(payable)}
-                      </p>
-                      {order.uniqueCode > 0 && (
-                        <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                          (Termasuk kode unik #{order.uniqueCode})
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* BANK TRANSFER Method */}
-              {order.paymentMethod === 'TRANSFER' && (
-                <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 space-y-3">
-                  <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 text-xs font-bold">
-                    <Building className="w-4 h-4 text-[#FF6B1A]" />
-                    <span>Rekening Tujuan Transfer:</span>
-                  </div>
-
-                  <div className="p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-black text-stone-900 dark:text-white uppercase">
-                        {settings?.bankName || 'BANK'}
-                      </p>
-                      <p className="text-lg font-black font-mono text-stone-900 dark:text-white">
-                        {settings?.bankAccountNumber || '-'}
-                      </p>
-                      <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                        a.n. {settings?.bankAccountName || 'Restoran'}
-                      </p>
-                    </div>
-
-                    {settings?.bankAccountNumber && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopy(settings.bankAccountNumber || '', 'BANK')}
-                        icon={copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      >
-                        {copiedBank ? 'Disalin' : 'Salin'}
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Nominal persis transfer */}
-                  <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-xl border border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] font-bold text-orange-800 dark:text-orange-300">
-                        Nominal Transfer Persis (Termasuk Kode Unik):
-                      </p>
-                      <p className="text-2xl font-black font-mono text-[#FF6B1A]">
-                        {formatRupiah(payable)}
-                      </p>
-                      {order.uniqueCode > 0 && (
-                        <p className="text-[10px] text-stone-500 dark:text-stone-400">
-                          Kode unik Rp {order.uniqueCode} untuk verifikasi otomatis
-                        </p>
-                      )}
-                    </div>
-
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleCopy(String(payable), 'AMOUNT')}
-                      icon={copiedAmount ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
-                    >
-                      {copiedAmount ? 'Disalin' : 'Salin Nominal'}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* DI_MEJA Method */}
-              {order.paymentMethod === 'DI_MEJA' && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-2xl text-center space-y-2">
-                  <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                    Pembayaran Tunai / QRIS di Meja
-                  </p>
-                  <p className="text-xs text-blue-800 dark:text-blue-300">
-                    Silakan siapkan pembayaran sebesar:
-                  </p>
-                  <p className="text-3xl font-black font-mono text-blue-950 dark:text-blue-100">
-                    {formatRupiah(payable)}
-                  </p>
-                  <p className="text-[11px] text-blue-700 dark:text-blue-400">
-                    Petugas kami akan menagih pembayaran saat pesanan diantarkan ke Meja {order.tableNumber}.
-                  </p>
-                </div>
-              )}
-
-              {/* Tombol "Saya Sudah Bayar" & Status Klaim */}
-              {order.customerClaimedPaid ? (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Anda sudah menandai pembayaran. Sedang diverifikasi oleh staf restoran.</span>
-                </div>
+              {order.paymentStatus === 'LUNAS' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black">
+                  <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>LUNAS</span>
+                </span>
               ) : (
-                <Button
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  loading={claiming}
-                  onClick={handleClaimPaid}
-                  icon={<Check className="w-4 h-4 stroke-[3]" />}
-                >
-                  Saya Sudah Bayar
-                </Button>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-black">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>MENUNGGU PEMBAYARAN</span>
+                </span>
               )}
             </div>
-          )}
-        </Card>
+
+            {/* Jika LUNAS: Tampilkan kartu hijau "Pembayaran Diterima ✓" */}
+            {order.paymentStatus === 'LUNAS' ? (
+              <div className="p-5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border-2 border-emerald-500/40 text-center space-y-2 animate-in zoom-in-95 duration-300">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500 text-white shadow-md mx-auto">
+                  <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-emerald-900 dark:text-emerald-100">
+                    Pembayaran Diterima ✓
+                  </h3>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
+                    Metode: {order.paidMethodFinal || order.paymentMethod}
+                  </p>
+                </div>
+                <p className="text-2xl sm:text-3xl font-black font-mono text-emerald-800 dark:text-emerald-200 pt-1">
+                  {formatRupiah(payable)}
+                </p>
+              </div>
+            ) : (
+              /* Jika BELUM BAYAR: Tampilkan QRIS / Petunjuk Transfer / Di Meja + Tombol Saya Sudah Bayar */
+              <div className="space-y-4">
+                {/* Timeout countdown if exists */}
+                {timeLeftSeconds !== null && timeLeftSeconds > 0 && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-2xl flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                      <span>Batas Waktu Pembayaran:</span>
+                    </div>
+                    <span className="font-mono text-sm font-black text-amber-700 dark:text-amber-300">
+                      {formatCountdown(timeLeftSeconds)}
+                    </span>
+                  </div>
+                )}
+
+                {/* QRIS Method */}
+                {order.paymentMethod === 'QRIS' && (
+                  <div className="space-y-3 text-center">
+                    <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 flex flex-col items-center">
+                      <p className="text-xs font-bold text-stone-600 dark:text-stone-300 mb-3">
+                        Pindai QRIS Dinamis Berikut Melalui Aplikasi M-Banking / E-Wallet Anda:
+                      </p>
+
+                      {dynamicQrUrl ? (
+                        <div className="p-3 bg-white rounded-2xl shadow-sm border border-stone-200 max-w-[240px]">
+                          <img
+                            src={dynamicQrUrl}
+                            alt="QRIS Dinamis Pembayaran"
+                            className="w-full h-auto aspect-square"
+                          />
+                        </div>
+                      ) : qrError ? (
+                        <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold">
+                          {qrError}
+                        </div>
+                      ) : (
+                        <div className="w-48 h-48 rounded-xl bg-stone-200 dark:bg-stone-800 animate-pulse flex items-center justify-center">
+                          <QrCode className="w-10 h-10 text-stone-400" />
+                        </div>
+                      )}
+
+                      <div className="mt-4 space-y-1">
+                        <p className="text-xs text-stone-500 dark:text-stone-400">
+                          Total yang Harus Dibayar:
+                        </p>
+                        <p className="text-3xl font-black font-mono text-[#FF6B1A]">
+                          {formatRupiah(payable)}
+                        </p>
+                        {order.uniqueCode > 0 && (
+                          <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                            (Termasuk kode unik #{order.uniqueCode})
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* BANK TRANSFER Method */}
+                {order.paymentMethod === 'TRANSFER' && (
+                  <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 space-y-3">
+                    <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 text-xs font-bold">
+                      <Building className="w-4 h-4 text-[#FF6B1A]" />
+                      <span>Rekening Tujuan Transfer:</span>
+                    </div>
+
+                    <div className="p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-black text-stone-900 dark:text-white uppercase">
+                          {settings?.bankName || 'BANK'}
+                        </p>
+                        <p className="text-lg font-black font-mono text-stone-900 dark:text-white">
+                          {settings?.bankAccountNumber || '-'}
+                        </p>
+                        <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                          a.n. {settings?.bankAccountName || 'Restoran'}
+                        </p>
+                      </div>
+
+                      {settings?.bankAccountNumber && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(settings.bankAccountNumber || '', 'BANK')}
+                          icon={copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        >
+                          {copiedBank ? 'Disalin' : 'Salin'}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Nominal persis transfer */}
+                    <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-xl border border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-bold text-orange-800 dark:text-orange-300">
+                          Nominal Transfer Persis (Termasuk Kode Unik):
+                        </p>
+                        <p className="text-2xl font-black font-mono text-[#FF6B1A]">
+                          {formatRupiah(payable)}
+                        </p>
+                        {order.uniqueCode > 0 && (
+                          <p className="text-[10px] text-stone-500 dark:text-stone-400">
+                            Kode unik Rp {order.uniqueCode} untuk verifikasi otomatis
+                          </p>
+                        )}
+                      </div>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleCopy(String(payable), 'AMOUNT')}
+                        icon={copiedAmount ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                      >
+                        {copiedAmount ? 'Disalin' : 'Salin Nominal'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* DI_MEJA Method */}
+                {order.paymentMethod === 'DI_MEJA' && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-2xl text-center space-y-2">
+                    <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                      Pembayaran Tunai / QRIS di Meja
+                    </p>
+                    <p className="text-xs text-blue-800 dark:text-blue-300">
+                      Silakan siapkan pembayaran sebesar:
+                    </p>
+                    <p className="text-3xl font-black font-mono text-blue-950 dark:text-blue-100">
+                      {formatRupiah(payable)}
+                    </p>
+                    <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                      Petugas kami akan menagih pembayaran saat pesanan diantarkan ke Meja {order.tableNumber}.
+                    </p>
+                  </div>
+                )}
+
+                {/* Tombol "Saya Sudah Bayar" & Status Klaim */}
+                {order.customerClaimedPaid ? (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Anda sudah menandai pembayaran. Sedang diverifikasi oleh staf restoran.</span>
+                  </div>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={claiming}
+                    onClick={handleClaimPaid}
+                    icon={<Check className="w-4 h-4 stroke-[3]" />}
+                  >
+                    Saya Sudah Bayar
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Order Items Breakdown */}
         <Card className="p-5 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-3">

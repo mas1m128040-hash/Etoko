@@ -499,6 +499,61 @@ class AudioEngine {
     this.playBellHarmonic(ctx, 659.25, now + 0.1, 0.2, this.currentVolume * 0.4);
     this.playBellHarmonic(ctx, 783.99, now + 0.2, 0.35, this.currentVolume * 0.5);
   }
+
+  /**
+   * Chime merdu saat pembayaran pesanan dikonfirmasi LUNAS di layar pelanggan
+   */
+  public playPaymentSuccessChime(customVolume?: number): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+    const vol = customVolume !== undefined ? customVolume / 100 : this.currentVolume;
+    if (vol <= 0.01) return;
+    const now = ctx.currentTime;
+    // Ascending bright chime: C5 -> E5 -> G5 -> C6
+    this.playBellHarmonic(ctx, 523.25, now, 0.25, vol * 0.6);
+    this.playBellHarmonic(ctx, 659.25, now + 0.1, 0.25, vol * 0.65);
+    this.playBellHarmonic(ctx, 783.99, now + 0.2, 0.35, vol * 0.7);
+    this.playBellHarmonic(ctx, 1046.5, now + 0.32, 0.45, vol * 0.8);
+    this.triggerVibrate([100, 50, 150]);
+  }
+
+  /**
+   * Nada pendek khusus saat pelanggan menekan "Saya Sudah Bayar" di dashboard admin.
+   * Berbeda dari alarm pesanan baru, tidak berulang.
+   */
+  public playPaymentClaimTone(customVolume?: number): number {
+    const ctx = this.getContext();
+    if (!ctx) return 450;
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+    const vol = customVolume !== undefined ? customVolume / 100 : this.currentVolume;
+    if (vol <= 0.01) return 450;
+    const now = ctx.currentTime;
+    // Bright 2-tone cash register chime (587.33Hz D5 -> 880Hz A5)
+    this.playBellHarmonic(ctx, 587.33, now, 0.2, vol * 0.75);
+    this.playBellHarmonic(ctx, 880.0, now + 0.14, 0.35, vol * 0.9);
+    this.triggerVibrate([80, 40, 100]);
+    return 450;
+  }
+
+  /**
+   * Mainkan nada klaim bayar + suara orang (Web Speech API) SEKALI
+   */
+  public async playPaymentClaimNotification(options: {
+    voiceText: string;
+    volume?: number;
+  }): Promise<void> {
+    const vol = options.volume !== undefined ? options.volume : this.currentVolume * 100;
+    const toneDuration = this.playPaymentClaimTone(vol);
+    await new Promise((resolve) => setTimeout(resolve, toneDuration + 120));
+    if (options.voiceText) {
+      await this.speakText(options.voiceText, vol);
+    }
+  }
 }
 
 export const audioEngine = new AudioEngine();

@@ -24,9 +24,10 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { MenuCardSkeleton } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { FirebaseErrorCard } from '../../components/ui/FirebaseErrorCard';
+import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
 import { authService } from '../../services/authService';
 import { auth } from '../../config/firebase';
+import { ThemeToggle } from '../../components/layout/ThemeToggle';
 
 export const MenuPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -196,6 +197,9 @@ export const MenuPage: React.FC = () => {
                 <MapPin className="w-3.5 h-3.5" />
                 <span>{tableNumber ? `Meja ${tableNumber}` : 'Pilih Meja'}</span>
               </button>
+
+              {/* Tombol Tema Terang / Gelap */}
+              <ThemeToggle />
             </div>
           </div>
 

@@ -2,14 +2,14 @@ import React from 'react';
 import { AlertCircle, RefreshCw, KeyRound, ShieldAlert, WifiOff } from 'lucide-react';
 import { Button } from './Button';
 
-interface FirebaseErrorCardProps {
+export interface FirebaseNoticeCardProps {
   title?: string;
   error: unknown | Error | { code?: string; message?: string } | null;
   onRetry?: () => void;
   className?: string;
 }
 
-export const FirebaseErrorCard: React.FC<FirebaseErrorCardProps> = ({
+export const FirebaseNoticeCard: React.FC<FirebaseNoticeCardProps> = ({
   title = 'Kendala Koneksi Firebase Firestore',
   error,
   onRetry,
@@ -115,3 +115,5 @@ export const FirebaseErrorCard: React.FC<FirebaseErrorCardProps> = ({
     </div>
   );
 };
+
+export const FirebaseErrorCard = FirebaseNoticeCard;

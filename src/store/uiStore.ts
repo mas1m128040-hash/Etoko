@@ -24,14 +24,21 @@ interface UiState {
 const getInitialTheme = (): 'light' | 'dark' => {
   if (typeof window === 'undefined') return 'dark';
   try {
-    const saved = localStorage.getItem('admin_theme');
+    const saved = localStorage.getItem('app_theme') || localStorage.getItem('admin_theme');
     if (saved === 'light' || saved === 'dark') {
       return saved;
+    }
+    // Default mengikuti preferensi perangkat (prefers-color-scheme) bila belum pernah dipilih
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
     }
   } catch {
     // ignore
   }
-  return 'dark'; // Tampilan gelap tetap default
+  return 'dark';
 };
 
 const applyThemeToDom = (theme: 'light' | 'dark') => {
@@ -42,6 +49,7 @@ const applyThemeToDom = (theme: 'light' | 'dark') => {
     document.documentElement.classList.remove('dark');
   }
   try {
+    localStorage.setItem('app_theme', theme);
     localStorage.setItem('admin_theme', theme);
   } catch {
     // ignore

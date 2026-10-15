@@ -23,7 +23,7 @@ import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
-import { FirebaseErrorCard } from '../../components/ui/FirebaseErrorCard';
+import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { formatRupiah } from '../../lib/formatters';
 import { Menu } from '../../types';

@@ -26,7 +26,7 @@ import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
-import { FirebaseErrorCard } from '../../components/ui/FirebaseErrorCard';
+import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
 import { Settings, AlarmTone, AlarmMode } from '../../types';
 import { DEFAULT_SETTINGS, ALARM_TONE_LABELS, ALARM_MODE_LABELS } from '../../config/constants';
 import { formatRupiah, formatVoiceOrderText } from '../../lib/formatters';
@@ -42,6 +42,7 @@ export const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [testingVoice, setTestingVoice] = useState(false);
+  const [testingPaymentVoice, setTestingPaymentVoice] = useState(false);
   const [isSeeded, setIsSeeded] = useState<boolean>(true); // default true (sembunyikan bila koleksi menus berisi data)
   const [showSeedModal, setShowSeedModal] = useState<boolean>(false);
 
@@ -68,6 +69,14 @@ export const SettingsPage: React.FC = () => {
       sampleOrder
     );
   }, [settings.alarmVoiceText, sampleOrder]);
+
+  const paymentVoicePreviewText = useMemo(() => {
+    return formatVoiceOrderText(
+      settings.paymentVoiceText ||
+        'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.',
+      sampleOrder
+    );
+  }, [settings.paymentVoiceText, sampleOrder]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -139,6 +148,41 @@ export const SettingsPage: React.FC = () => {
       addToast('info', 'Uji suara selesai diputar.');
     } finally {
       setTestingVoice(false);
+    }
+  };
+
+  const handleInsertPaymentTag = (tag: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      paymentVoiceText: (prev.paymentVoiceText || '') + tag,
+    }));
+  };
+
+  const handleApplyPaymentFullTemplate = () => {
+    setSettings((prev) => ({
+      ...prev,
+      paymentVoiceText:
+        'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.',
+    }));
+    addToast('info', 'Template suara pembayaran berhasil dipasang.');
+  };
+
+  const handleTestPaymentVoice = async () => {
+    await activateAudio();
+    setTestingPaymentVoice(true);
+    try {
+      const template =
+        settings.paymentVoiceText ||
+        'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.';
+      const spokenText = formatVoiceOrderText(template, sampleOrder);
+
+      await audioEngine.playPaymentClaimNotification({
+        voiceText: spokenText,
+        volume,
+      });
+      addToast('info', 'Uji suara pembayaran selesai diputar.');
+    } finally {
+      setTestingPaymentVoice(false);
     }
   };
 
@@ -675,6 +719,90 @@ export const SettingsPage: React.FC = () => {
                     icon={<Mic className="w-3.5 h-3.5 text-[#FF6B1A]" />}
                   >
                     Tes Suara Orang
+                  </Button>
+                </div>
+              </div>
+
+              {/* Teks Suara Pembayaran Masuk (Web Speech API) */}
+              <div className="pt-4 border-t border-stone-100 dark:border-stone-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block font-bold text-stone-800 dark:text-stone-200">
+                      Template Teks Suara Pembayaran Masuk (Web Speech API)
+                    </label>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                      Dibacakan SEKALI di portal admin saat pelanggan menekan tombol "Saya Sudah Bayar"
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Insert Tag Chips & Full Template Button */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-stone-500 mr-1">Sisipkan Tag:</span>
+                  {[
+                    { tag: '{nomor}', label: '{nomor}' },
+                    { tag: '{meja}', label: '{meja}' },
+                    { tag: '{nama}', label: '{nama}' },
+                    { tag: '{total}', label: '{total}' },
+                    { tag: '{jumlah}', label: '{jumlah}' },
+                  ].map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => handleInsertPaymentTag(item.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/40 text-[#FF6B1A] font-mono text-[11px] font-bold border border-orange-200 dark:border-orange-800 transition-colors"
+                      title={`Sisipkan tag ${item.tag}`}
+                    >
+                      + {item.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleApplyPaymentFullTemplate}
+                    className="ml-auto px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-[11px] font-bold border border-stone-200 dark:border-stone-700 flex items-center gap-1 transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#FF6B1A]" />
+                    <span>Pakai Template Lengkap</span>
+                  </button>
+                </div>
+
+                <textarea
+                  rows={2}
+                  value={settings.paymentVoiceText ?? ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, paymentVoiceText: e.target.value })
+                  }
+                  placeholder="Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
+                />
+
+                {/* Pratinjau Kalimat Hasil Akhir Memakai Data Contoh */}
+                <div className="p-3 bg-stone-100 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-stone-500 dark:text-stone-400">
+                    <span>Pratinjau Hasil Pembacaan (Data Contoh):</span>
+                    <span className="text-[10px] text-stone-400">
+                      Meja 5 • Budi • 3 Item • Rp 75.000
+                    </span>
+                  </div>
+                  <p className="text-stone-800 dark:text-stone-200 italic font-medium leading-relaxed">
+                    "{paymentVoicePreviewText}"
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
+                  <p className="text-[11px] text-stone-400">
+                    Diputar sekali bersama nada notifikasi pembayaran saat pelanggan konfirmasi.
+                  </p>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    loading={testingPaymentVoice}
+                    onClick={handleTestPaymentVoice}
+                    icon={<Play className="w-3.5 h-3.5 text-[#FF6B1A]" />}
+                  >
+                    Tes Suara Pembayaran
                   </Button>
                 </div>
               </div>

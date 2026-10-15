@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   alarmTone: 'DEFAULT',
   alarmMode: 'NADA',
   alarmVoiceText: 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.',
+  paymentVoiceText:
+    'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.',
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {

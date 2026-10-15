@@ -7,6 +7,7 @@ import { AlarmBanner } from '../alarm/AlarmBanner';
 import { NewOrderPopup } from '../alarm/NewOrderPopup';
 import { ToastContainer } from '../ui/Toast';
 import { useNewOrderAlarm } from '../../hooks/useNewOrderAlarm';
+import { usePaymentClaimNotification } from '../../hooks/usePaymentClaimNotification';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { useUiStore } from '../../store/uiStore';
 
@@ -23,6 +24,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { newOrders, acceptSingleOrder, acceptAllNewOrders } = useNewOrderAlarm();
+  usePaymentClaimNotification();
   const { isActive: wakeLockActive } = useWakeLock(enableWakeLock);
   const { theme } = useUiStore();
 

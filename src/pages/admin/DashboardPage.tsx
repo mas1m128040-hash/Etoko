@@ -18,7 +18,7 @@ import { AppShell } from '../../components/layout/AppShell';
 import { OrderCard } from '../../components/order/OrderCard';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { FirebaseErrorCard } from '../../components/ui/FirebaseErrorCard';
+import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
 import { Button } from '../../components/ui/Button';
 import { OrderStatus } from '../../types';
 import { useUiStore } from '../../store/uiStore';
