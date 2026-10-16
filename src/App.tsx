@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { AppRoutes } from './app/routes';
+import { VersionNotificationBanner } from './components/common/VersionNotificationBanner';
 
 export default function App() {
   // Register simple PWA service worker
@@ -14,6 +15,7 @@ export default function App() {
 
   return (
     <HashRouter>
+      <VersionNotificationBanner />
       <AppRoutes />
     </HashRouter>
   );

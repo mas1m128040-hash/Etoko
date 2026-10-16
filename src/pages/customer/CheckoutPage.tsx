@@ -693,6 +693,8 @@ export const CheckoutPage: React.FC = () => {
       // 5. Update cooldown and clear cart
       setLastOrderTime(Date.now());
       clearCart();
+      localStorage.setItem('smart_resto_active_order_id', newOrder.id);
+      sessionStorage.setItem('smart_resto_active_order_id', newOrder.id);
 
       // 6. Show success screen "Pesanan Terkirim"
       setSubmittedOrder(newOrder);

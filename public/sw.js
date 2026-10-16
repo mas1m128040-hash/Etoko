@@ -42,8 +42,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Jangan sentuh request ke Firebase, Google APIs, atau endpoint API backend
+  // Jangan sentuh request ke version.json, Firebase, Google APIs, atau endpoint API backend
   if (
+    url.pathname === '/version.json' ||
     url.origin.includes('firestore') ||
     url.origin.includes('googleapis') ||
     url.origin.includes('firebase') ||

@@ -28,6 +28,10 @@ import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/Fir
 import { authService } from '../../services/authService';
 import { auth } from '../../config/firebase';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
+import {
+  cleanLocalOrderReferences,
+  checkAndCleanStaleLocalOrders,
+} from '../../lib/orderStorage';
 
 export const MenuPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,7 +61,11 @@ export const MenuPage: React.FC = () => {
 
   // Customer orders hook: hanya menampilkan pesanan aktif untuk meja aktif pelanggan
   const currentUid = auth.currentUser?.uid;
-  const { orders: customerOrders } = useCustomerOrders(currentUid, tableNumber);
+  const {
+    orders: customerOrders,
+    rawOrders,
+    loading: customerOrdersLoading,
+  } = useCustomerOrders(currentUid, tableNumber);
   const activeUnpaidOrder = customerOrders.find(
     (o) => o.paymentStatus === 'BELUM_BAYAR' && o.status !== 'DIBATALKAN'
   );
@@ -120,32 +128,41 @@ export const MenuPage: React.FC = () => {
   }, [visibleCategories, selectedCategoryId, setSelectedCategoryId]);
 
   // 4. Sumber kebenaran nomor meja adalah parameter meja pada URL QR.
-  // Setiap aplikasi dibuka dengan parameter meja, nomor meja aktif DIGANTI dengan nilai itu.
-  // Saat parameter meja berbeda dari meja yang tersimpan di perangkat, bersihkan referensi pesanan & keranjang untuk meja lain.
+  // Setiap aplikasi dibuka dengan parameter meja, nomor meja aktif DIGANTI dengan nilai itu, menimpa nilai yang tersimpan sebelumnya.
+  // Saat parameter meja berbeda dari meja yang tersimpan di perangkat, bersihkan referensi pesanan yang tersimpan lokal (localStorage / sessionStorage) untuk meja lain.
   useEffect(() => {
     const tableParam = searchParams.get('table');
     if (tableParam) {
-      const storedTable = localStorage.getItem('smart_resto_table_number');
-      if (storedTable && storedTable !== tableParam) {
+      const storedTable =
+        localStorage.getItem('smart_resto_table_number') ||
+        sessionStorage.getItem('smart_resto_table_number');
+      if (storedTable && storedTable.trim() !== tableParam.trim()) {
         clearCart();
-        localStorage.removeItem('smart_resto_active_order_id');
+        cleanLocalOrderReferences();
       }
       setTableNumber(tableParam);
+      localStorage.setItem('smart_resto_table_number', tableParam);
+      sessionStorage.setItem('smart_resto_table_number', tableParam);
     } else if (!tableNumber) {
       setShowTableModal(true);
     }
   }, [searchParams, tableNumber, setTableNumber, clearCart]);
 
-  // Bersihkan referensi lokal pesanan aktif jika pesanan sudah tidak ditampilkan
+  // Bersihkan referensi lokal pesanan aktif jika pesanan sudah SELESAI lebih dari 10 menit atau DIBATALKAN
   useEffect(() => {
-    const savedActiveOrderId = localStorage.getItem('smart_resto_active_order_id');
+    if (rawOrders && rawOrders.length > 0) {
+      checkAndCleanStaleLocalOrders(rawOrders);
+    }
+    const savedActiveOrderId =
+      localStorage.getItem('smart_resto_active_order_id') ||
+      sessionStorage.getItem('smart_resto_active_order_id');
     if (savedActiveOrderId && customerOrders.length > 0) {
       const stillVisible = customerOrders.some((o) => o.id === savedActiveOrderId);
       if (!stillVisible) {
-        localStorage.removeItem('smart_resto_active_order_id');
+        cleanLocalOrderReferences();
       }
     }
-  }, [customerOrders]);
+  }, [customerOrders, rawOrders]);
 
   const handleOpenItemDetail = (menu: Menu) => {
     if (!menu.available) return;
@@ -229,8 +246,16 @@ export const MenuPage: React.FC = () => {
               <span>{tableNumber ? `Meja ${tableNumber}` : 'Pilih Meja'}</span>
             </button>
 
-            {/* Chip "Pesanan Saya" jika ada pesanan */}
-            {customerOrders.length > 0 && (
+            {/* Indikator Memuat Pesanan dari Server */}
+            {customerOrdersLoading && currentUid && (
+              <div className="min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-100 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-800 text-stone-500 dark:text-stone-400 text-xs font-semibold shrink-0">
+                <div className="w-3.5 h-3.5 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" />
+                <span>Memeriksa pesanan...</span>
+              </div>
+            )}
+
+            {/* Chip "Pesanan Saya" jika ada pesanan (hanya tampil setelah data server terverifikasi) */}
+            {!customerOrdersLoading && customerOrders.length > 0 && (
               <Link
                 to={`/order/${customerOrders[0].id}`}
                 className="min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shrink-0"

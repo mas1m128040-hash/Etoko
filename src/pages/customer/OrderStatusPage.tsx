@@ -32,6 +32,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import { audioEngine } from '../../lib/audioEngine';
+import { handleSingleOrderStatusCleanup } from '../../lib/orderStorage';
 
 export const OrderStatusPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -88,6 +89,7 @@ export const OrderStatusPage: React.FC = () => {
         }
         if (fetchedOrder) {
           prevPaymentStatusRef.current = fetchedOrder.paymentStatus;
+          handleSingleOrderStatusCleanup(fetchedOrder);
         }
 
         setOrder(fetchedOrder);

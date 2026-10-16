@@ -6,6 +6,7 @@ import {
   query,
   where,
   getDocs,
+  getDocsFromServer,
   getDoc,
   updateDoc,
   onSnapshot,
@@ -37,6 +38,7 @@ export interface CreateOrderParams {
 export const orderService = {
   /**
    * Cek apakah customer memiliki pesanan aktif yang belum lunas dan belum dibatalkan
+   * Mengutamakan data langsung dari server agar tidak membaca cache basi
    */
   async checkActiveUnpaidOrder(customerUid: string): Promise<Order | null> {
     if (!customerUid) return null;
@@ -45,12 +47,21 @@ export const orderService = {
       where('customerUid', '==', customerUid),
       where('paymentStatus', '==', 'BELUM_BAYAR')
     );
-    const snap = await getDocs(q);
-    const unpaid = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as Order))
-      .filter((o) => o.status !== 'DIBATALKAN');
+    try {
+      const snap = await getDocsFromServer(q);
+      const unpaid = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Order))
+        .filter((o) => o.status !== 'DIBATALKAN');
 
-    return unpaid.length > 0 ? unpaid[0] : null;
+      return unpaid.length > 0 ? unpaid[0] : null;
+    } catch {
+      const snap = await getDocs(q);
+      const unpaid = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Order))
+        .filter((o) => o.status !== 'DIBATALKAN');
+
+      return unpaid.length > 0 ? unpaid[0] : null;
+    }
   },
 
   /**
@@ -332,6 +343,7 @@ export const orderService = {
 
   /**
    * Realtime listener untuk single order (digunakan customer di layar status)
+   * Mengabaikan data cache lokal lama dan menunggu data terbaru dari server
    */
   subscribeSingleOrder(
     orderId: string,
@@ -339,9 +351,29 @@ export const orderService = {
     onError?: (error: Error) => void
   ) {
     const orderRef = doc(db, ORDERS_COL, orderId);
-    return onSnapshot(
+    let hasReceivedServerData = false;
+
+    // Timeout fallback agar jika benar-benar offline tetap dapat memunculkan status
+    const fallbackTimer = setTimeout(() => {
+      hasReceivedServerData = true;
+    }, 8000);
+
+    const unsubscribe = onSnapshot(
       orderRef,
+      { includeMetadataChanges: true },
       (snap) => {
+        const isFromCache = snap.metadata.fromCache;
+        const hasPendingWrites = snap.metadata.hasPendingWrites;
+
+        // Jika data dari cache lokal dan belum ada data server yang tiba,
+        // tahan dahulu agar riwayat status basi tidak berkedip sesaat sebelum data server masuk
+        if (isFromCache && !hasPendingWrites && !hasReceivedServerData) {
+          return;
+        }
+
+        hasReceivedServerData = true;
+        clearTimeout(fallbackTimer);
+
         if (!snap.exists()) {
           callback(null);
         } else {
@@ -349,14 +381,21 @@ export const orderService = {
         }
       },
       (error) => {
+        clearTimeout(fallbackTimer);
         console.error('[Firestore Error] Gagal memuat pesanan:', error);
         if (onError) onError(error as Error);
       }
     );
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   },
 
   /**
    * Realtime listener untuk pesanan customer berdasarkan customerUid hari ini
+   * Mengabaikan data dari cache lokal dan menunggu server data sebelum menampilkan Pesanan Saya
    */
   subscribeCustomerOrders(
     customerUid: string,
@@ -370,9 +409,28 @@ export const orderService = {
       where('dateKey', '==', dateKey)
     );
 
-    return onSnapshot(
+    let hasReceivedServerData = false;
+
+    // Timeout fallback jika benar-benar offline
+    const fallbackTimer = setTimeout(() => {
+      hasReceivedServerData = true;
+    }, 8000);
+
+    const unsubscribe = onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snapshot) => {
+        const isFromCache = snapshot.metadata.fromCache;
+        const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+
+        // Abaikan snapshot dari cache lokal jika server belum merespons
+        if (isFromCache && !hasPendingWrites && !hasReceivedServerData) {
+          return;
+        }
+
+        hasReceivedServerData = true;
+        clearTimeout(fallbackTimer);
+
         const orders = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
@@ -387,10 +445,16 @@ export const orderService = {
         callback(orders);
       },
       (error) => {
+        clearTimeout(fallbackTimer);
         console.error('[Firestore Error] Gagal memuat pesanan pelanggan:', error);
         if (onError) onError(error as Error);
       }
     );
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   },
 
   /**
