@@ -18,6 +18,8 @@ import {
   HelpCircle,
   RefreshCw,
   XCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { orderService } from '../../services/orderService';
 import { settingsService } from '../../services/settingsService';
@@ -46,6 +48,7 @@ export const OrderStatusPage: React.FC = () => {
   const [qrError, setQrError] = useState<string | null>(null);
   const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(true);
+  const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
   const prevPaymentStatusRef = useRef<string | undefined>(undefined);
 
   // 1. Ensure anonymous session
@@ -224,9 +227,9 @@ export const OrderStatusPage: React.FC = () => {
   }
 
   const activeTableNumber =
-    localStorage.getItem('smart_resto_table_number') || order?.tableNumber || '';
+    localStorage.getItem('smart_resto_table_number') || '';
   const backToMenuUrl = activeTableNumber
-    ? `/menu?table=${activeTableNumber}`
+    ? `/menu?table=${encodeURIComponent(activeTableNumber)}`
     : '/menu';
 
   if (error || !order) {
@@ -300,9 +303,10 @@ export const OrderStatusPage: React.FC = () => {
   const stageStep = order.status === 'BARU' ? 1 : order.status === 'DITERIMA' ? 2 : 3;
 
   const payable = order.payableAmount || order.totalPrice;
+  const totalItemCount = order.items.reduce((sum, item) => sum + item.qty, 0);
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-[#121212] text-stone-900 dark:text-stone-100 pb-20 antialiased">
+    <div className="min-h-screen bg-stone-50 dark:bg-[#121212] text-stone-900 dark:text-stone-100 flex flex-col antialiased">
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-4 py-2.5 shadow-xs">
         <div className="max-w-xl mx-auto flex items-center justify-between">
@@ -334,37 +338,43 @@ export const OrderStatusPage: React.FC = () => {
                   : 'bg-amber-500 animate-ping'
               }`}
             />
-            <span>{isRealtimeConnected ? 'Terhubung langsung' : 'Memperbarui...'}</span>
+            <span>{isRealtimeConnected ? 'Terhubung' : 'Memperbarui...'}</span>
           </div>
 
           <ThemeToggle />
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto p-4 space-y-4">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-xl w-full mx-auto p-3 sm:p-4 space-y-3">
         {/* Main Status Header Card */}
-        <Card className="p-6 text-center bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-4">
-          <div>
-            <span className="text-xs font-black tracking-widest text-[#FF6B1A] uppercase">
-              NOMOR ANTREAN ANDA
-            </span>
-            <h1 className="text-6xl font-black font-mono tracking-tight text-stone-900 dark:text-white pt-1">
-              #{order.orderCode}
-            </h1>
+        <Card className="p-3.5 sm:p-4 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-sm rounded-2xl space-y-3">
+          {/* Baris 1: Label Nomor Antrean, Nomor Order (clamp), dan Lencana Meja & Nama */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-[11px] font-bold tracking-wider text-stone-500 dark:text-stone-400 uppercase block leading-none">
+                Nomor Antrean
+              </span>
+              <span
+                className="font-black font-mono tracking-tight text-stone-900 dark:text-white leading-none mt-1 inline-block"
+                style={{ fontSize: 'clamp(32px, 9vw, 44px)' }}
+              >
+                #{order.orderCode}
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 shrink-0">
+              <MapPin className="w-3.5 h-3.5 text-[#FF6B1A]" />
+              <span>Meja {order.tableNumber}</span>
+              <span className="text-stone-300 dark:text-stone-600">•</span>
+              <span className="truncate max-w-[100px] xs:max-w-[140px]">{order.customerName}</span>
+            </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-sm font-bold text-stone-800 dark:text-stone-200">
-            <MapPin className="w-4 h-4 text-[#FF6B1A]" />
-            <span>Meja {order.tableNumber}</span>
-            <span className="text-stone-300 dark:text-stone-600">•</span>
-            <span>{order.customerName}</span>
-          </div>
-
-          {/* 3-Stage Progress Indicator (Terkirim -> Diterima -> Selesai) */}
+          {/* Stepper 3 Tahap (Terkirim, Diterima, Selesai) */}
           {isCancelled ? (
-            <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-2xl text-red-700 dark:text-red-300 space-y-1">
-              <div className="flex items-center justify-center gap-2 font-bold text-sm">
-                <XCircle className="w-5 h-5 text-red-500" />
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl text-red-700 dark:text-red-300 text-center space-y-0.5">
+              <div className="flex items-center justify-center gap-1.5 font-bold text-sm">
+                <XCircle className="w-4 h-4 text-red-500" />
                 <span>Pesanan Dibatalkan</span>
               </div>
               <p className="text-xs text-red-600 dark:text-red-400">
@@ -372,387 +382,370 @@ export const OrderStatusPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="pt-2 pb-1 space-y-4">
-              <div className="grid grid-cols-3 gap-2 relative">
-                {/* Connector line */}
-                <div className="absolute top-4 left-1/6 right-1/6 h-1 bg-stone-200 dark:bg-stone-700 -z-0" />
-                <div
-                  className="absolute top-4 left-1/6 h-1 bg-[#FF6B1A] transition-all duration-500 -z-0"
-                  style={{
-                    width: stageStep === 1 ? '0%' : stageStep === 2 ? '50%' : '100%',
-                  }}
-                />
-
-                {/* Step 1 */}
-                <div className="flex flex-col items-center gap-2 z-10">
+            <div className="space-y-2 pt-1">
+              <div className="relative pt-1">
+                {/* Garis penghubung tepat di dalam batas kartu */}
+                <div className="absolute top-[18px] left-[16.666%] right-[16.666%] h-0.5 bg-stone-200 dark:bg-stone-700 overflow-hidden pointer-events-none">
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-                      stageStep >= 1
-                        ? 'bg-[#FF6B1A] text-white ring-4 ring-orange-500/20'
-                        : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
-                    }`}
-                  >
-                    1
-                  </div>
-                  <span
-                    className={`text-[11px] font-bold leading-tight ${
-                      stageStep >= 1
-                        ? 'text-stone-900 dark:text-white'
-                        : 'text-stone-400'
-                    }`}
-                  >
-                    Terkirim ke Admin
-                  </span>
+                    className="h-full bg-[#FF6B1A] transition-all duration-500"
+                    style={{
+                      width: stageStep === 1 ? '0%' : stageStep === 2 ? '50%' : '100%',
+                    }}
+                  />
                 </div>
 
-                {/* Step 2 */}
-                <div className="flex flex-col items-center gap-2 z-10">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-                      stageStep >= 2
-                        ? 'bg-blue-600 text-white ring-4 ring-blue-500/20'
-                        : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
-                    }`}
-                  >
-                    2
+                <div className="grid grid-cols-3 gap-1 relative z-10">
+                  {/* Step 1: Terkirim */}
+                  <div className="flex flex-col items-center text-center">
+                    <div
+                      className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
+                        stageStep >= 1
+                          ? 'bg-[#FF6B1A] text-white ring-2 ring-orange-500/20'
+                          : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
+                      }`}
+                    >
+                      {stageStep > 1 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '1'}
+                    </div>
+                    <span
+                      className={`text-[12px] sm:text-[13px] font-bold leading-tight mt-1 line-clamp-2 ${
+                        stageStep >= 1 ? 'text-stone-900 dark:text-white' : 'text-stone-400'
+                      }`}
+                    >
+                      Terkirim
+                    </span>
                   </div>
-                  <span
-                    className={`text-[11px] font-bold leading-tight ${
-                      stageStep >= 2
-                        ? 'text-stone-900 dark:text-white'
-                        : 'text-stone-400'
-                    }`}
-                  >
-                    Diterima Admin
-                  </span>
-                </div>
 
-                {/* Step 3 */}
-                <div className="flex flex-col items-center gap-2 z-10">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-                      stageStep >= 3
-                        ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/20'
-                        : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
-                    }`}
-                  >
-                    3
+                  {/* Step 2: Diterima */}
+                  <div className="flex flex-col items-center text-center">
+                    <div
+                      className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
+                        stageStep >= 2
+                          ? 'bg-blue-600 text-white ring-2 ring-blue-500/20'
+                          : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
+                      }`}
+                    >
+                      {stageStep > 2 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '2'}
+                    </div>
+                    <span
+                      className={`text-[12px] sm:text-[13px] font-bold leading-tight mt-1 line-clamp-2 ${
+                        stageStep >= 2 ? 'text-stone-900 dark:text-white' : 'text-stone-400'
+                      }`}
+                    >
+                      Diterima
+                    </span>
                   </div>
-                  <span
-                    className={`text-[11px] font-bold leading-tight ${
-                      stageStep >= 3
-                        ? 'text-stone-900 dark:text-white'
-                        : 'text-stone-400'
-                    }`}
-                  >
-                    Selesai
-                  </span>
+
+                  {/* Step 3: Selesai */}
+                  <div className="flex flex-col items-center text-center">
+                    <div
+                      className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
+                        stageStep >= 3
+                          ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/20'
+                          : 'bg-stone-200 dark:bg-stone-700 text-stone-500'
+                      }`}
+                    >
+                      {stageStep >= 3 ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '3'}
+                    </div>
+                    <span
+                      className={`text-[12px] sm:text-[13px] font-bold leading-tight mt-1 line-clamp-2 ${
+                        stageStep >= 3 ? 'text-stone-900 dark:text-white' : 'text-stone-400'
+                      }`}
+                    >
+                      Selesai
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Status Message */}
-              <div
-                className={`p-3.5 rounded-2xl border text-xs font-bold leading-relaxed ${
-                  stageStep === 1
-                    ? 'bg-orange-500/10 border-orange-500/20 text-orange-950 dark:text-orange-200'
-                    : stageStep === 2
-                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-950 dark:text-blue-200'
-                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-950 dark:text-emerald-200'
-                }`}
-              >
-                {stageStep === 1 &&
-                  'Pesanan Anda telah diterima oleh sistem dan sedang menunggu konfirmasi admin.'}
-                {stageStep === 2 &&
-                  'Pesanan telah diterima oleh admin! Hidangan Anda sedang disiapkan.'}
-                {stageStep === 3 &&
-                  'Pesanan Anda telah selesai dan siap dihidangkan / telah diantar ke meja.'}
-              </div>
+              {/* Satu kalimat status singkat 14px */}
+              <p className="text-[14px] text-center font-medium text-stone-700 dark:text-stone-300 leading-normal pt-1">
+                {stageStep === 1 && 'Pesanan telah terkirim dan menunggu konfirmasi admin.'}
+                {stageStep === 2 && 'Pesanan telah diterima admin dan sedang disiapkan.'}
+                {stageStep === 3 && 'Pesanan selesai dan siap disajikan / telah diantar ke meja.'}
+              </p>
             </div>
           )}
         </Card>
 
-        {/* Payment Information Card (Hanya jika pesanan tidak dibatalkan) */}
+        {/* Kartu Pembayaran Ringkas */}
         {!isCancelled && (
-          <Card className="p-5 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-[#FF6B1A]" />
-                <h3 className="text-sm font-bold text-stone-900 dark:text-white uppercase tracking-wider">
-                  Status Pembayaran
-                </h3>
-              </div>
-
-              {order.paymentStatus === 'LUNAS' ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black">
-                  <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>LUNAS</span>
+          order.paymentStatus === 'LUNAS' ? (
+            <Card className="p-3.5 sm:p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 rounded-2xl">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-[13px] sm:text-[14px] font-bold text-emerald-900 dark:text-emerald-100 block leading-tight">
+                      Pembayaran Diterima
+                    </span>
+                    <span className="text-[11px] sm:text-[12px] text-emerald-700 dark:text-emerald-300 font-medium block truncate">
+                      Metode: {order.paidMethodFinal || order.paymentMethod}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[15px] sm:text-[16px] font-black font-mono text-emerald-800 dark:text-emerald-200 shrink-0">
+                  {formatRupiah(payable)}
                 </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-black">
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-3.5 sm:p-4 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 rounded-2xl space-y-3">
+              {/* Baris tunggal lencana status dan nominal */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold shrink-0">
                   <Clock className="w-3.5 h-3.5" />
                   <span>MENUNGGU PEMBAYARAN</span>
                 </span>
-              )}
-            </div>
-
-            {/* Jika LUNAS: Tampilkan kartu hijau "Pembayaran Diterima ✓" */}
-            {order.paymentStatus === 'LUNAS' ? (
-              <div className="p-5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border-2 border-emerald-500/40 text-center space-y-2 animate-in zoom-in-95 duration-300">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500 text-white shadow-md mx-auto">
-                  <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-emerald-900 dark:text-emerald-100">
-                    Pembayaran Diterima ✓
-                  </h3>
-                  <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
-                    Metode: {order.paidMethodFinal || order.paymentMethod}
-                  </p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-black font-mono text-emerald-800 dark:text-emerald-200 pt-1">
+                <span className="text-[15px] sm:text-[16px] font-black font-mono text-[#FF6B1A] shrink-0">
                   {formatRupiah(payable)}
-                </p>
+                </span>
               </div>
-            ) : (
-              /* Jika BELUM BAYAR: Tampilkan QRIS / Petunjuk Transfer / Di Meja + Tombol Saya Sudah Bayar */
-              <div className="space-y-4">
-                {/* Timeout countdown if exists */}
-                {timeLeftSeconds !== null && timeLeftSeconds > 0 && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-2xl flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-amber-600" />
-                      <span>Batas Waktu Pembayaran:</span>
-                    </div>
-                    <span className="font-mono text-sm font-black text-amber-700 dark:text-amber-300">
-                      {formatCountdown(timeLeftSeconds)}
-                    </span>
+
+              {/* Hitung mundur batas waktu pembayaran jika ada */}
+              {timeLeftSeconds !== null && timeLeftSeconds > 0 && (
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Batas Waktu Bayar:</span>
                   </div>
-                )}
-
-                {/* QRIS Method */}
-                {order.paymentMethod === 'QRIS' && (
-                  <div className="space-y-3 text-center">
-                    <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 flex flex-col items-center">
-                      <p className="text-xs font-bold text-stone-600 dark:text-stone-300 mb-3">
-                        Pindai QRIS Dinamis Berikut Melalui Aplikasi M-Banking / E-Wallet Anda:
-                      </p>
-
-                      {dynamicQrUrl ? (
-                        <div className="p-3 bg-white rounded-2xl shadow-sm border border-stone-200 max-w-[240px]">
-                          <img
-                            src={dynamicQrUrl}
-                            alt="QRIS Dinamis Pembayaran"
-                            className="w-full h-auto aspect-square"
-                          />
-                        </div>
-                      ) : qrError ? (
-                        <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold">
-                          {qrError}
-                        </div>
-                      ) : (
-                        <div className="w-48 h-48 rounded-xl bg-stone-200 dark:bg-stone-800 animate-pulse flex items-center justify-center">
-                          <QrCode className="w-10 h-10 text-stone-400" />
-                        </div>
-                      )}
-
-                      <div className="mt-4 space-y-1">
-                        <p className="text-xs text-stone-500 dark:text-stone-400">
-                          Total yang Harus Dibayar:
-                        </p>
-                        <p className="text-3xl font-black font-mono text-[#FF6B1A]">
-                          {formatRupiah(payable)}
-                        </p>
-                        {order.uniqueCode > 0 && (
-                          <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                            (Termasuk kode unik #{order.uniqueCode})
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* BANK TRANSFER Method */}
-                {order.paymentMethod === 'TRANSFER' && (
-                  <div className="p-4 bg-stone-50 dark:bg-stone-900/60 rounded-2xl border border-stone-200 dark:border-stone-800 space-y-3">
-                    <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 text-xs font-bold">
-                      <Building className="w-4 h-4 text-[#FF6B1A]" />
-                      <span>Rekening Tujuan Transfer:</span>
-                    </div>
-
-                    <div className="p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-black text-stone-900 dark:text-white uppercase">
-                          {settings?.bankName || 'BANK'}
-                        </p>
-                        <p className="text-lg font-black font-mono text-stone-900 dark:text-white">
-                          {settings?.bankAccountNumber || '-'}
-                        </p>
-                        <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                          a.n. {settings?.bankAccountName || 'Restoran'}
-                        </p>
-                      </div>
-
-                      {settings?.bankAccountNumber && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopy(settings.bankAccountNumber || '', 'BANK')}
-                          icon={copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                        >
-                          {copiedBank ? 'Disalin' : 'Salin'}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Nominal persis transfer */}
-                    <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-xl border border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
-                      <div>
-                        <p className="text-[11px] font-bold text-orange-800 dark:text-orange-300">
-                          Nominal Transfer Persis (Termasuk Kode Unik):
-                        </p>
-                        <p className="text-2xl font-black font-mono text-[#FF6B1A]">
-                          {formatRupiah(payable)}
-                        </p>
-                        {order.uniqueCode > 0 && (
-                          <p className="text-[10px] text-stone-500 dark:text-stone-400">
-                            Kode unik Rp {order.uniqueCode} untuk verifikasi otomatis
-                          </p>
-                        )}
-                      </div>
-
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleCopy(String(payable), 'AMOUNT')}
-                        icon={copiedAmount ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
-                      >
-                        {copiedAmount ? 'Disalin' : 'Salin Nominal'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* DI_MEJA Method */}
-                {order.paymentMethod === 'DI_MEJA' && (
-                  <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-2xl text-center space-y-2">
-                    <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                      Pembayaran Tunai / QRIS di Meja
-                    </p>
-                    <p className="text-xs text-blue-800 dark:text-blue-300">
-                      Silakan siapkan pembayaran sebesar:
-                    </p>
-                    <p className="text-3xl font-black font-mono text-blue-950 dark:text-blue-100">
-                      {formatRupiah(payable)}
-                    </p>
-                    <p className="text-[11px] text-blue-700 dark:text-blue-400">
-                      Petugas kami akan menagih pembayaran saat pesanan diantarkan ke Meja {order.tableNumber}.
-                    </p>
-                  </div>
-                )}
-
-                {/* Tombol "Saya Sudah Bayar" & Status Klaim */}
-                {order.customerClaimedPaid ? (
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Anda sudah menandai pembayaran. Sedang diverifikasi oleh staf restoran.</span>
-                  </div>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    loading={claiming}
-                    onClick={handleClaimPaid}
-                    icon={<Check className="w-4 h-4 stroke-[3]" />}
-                  >
-                    Saya Sudah Bayar
-                  </Button>
-                )}
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Order Items Breakdown */}
-        <Card className="p-5 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-md rounded-3xl space-y-3">
-          <h3 className="text-sm font-bold text-stone-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <Utensils className="w-4 h-4 text-[#FF6B1A]" />
-            <span>Rincian Menu Pesanan</span>
-          </h3>
-
-          <div className="divide-y divide-stone-100 dark:divide-stone-800 max-h-56 overflow-y-auto">
-            {order.items.map((item, idx) => (
-              <div key={idx} className="py-2.5 first:pt-0">
-                <div className="flex justify-between items-start text-sm">
-                  <div>
-                    <span className="font-bold text-[#FF6B1A] mr-2">{item.qty}x</span>
-                    <span className="font-semibold text-stone-900 dark:text-white">
-                      {item.name}
-                    </span>
-                    {item.note && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 italic pl-6 mt-0.5">
-                        "{item.note}"
-                      </p>
-                    )}
-                  </div>
-                  <span className="font-mono text-xs font-bold text-stone-700 dark:text-stone-300 shrink-0">
-                    {formatRupiah(item.price * item.qty)}
+                  <span className="font-mono text-xs font-black text-amber-700 dark:text-amber-300">
+                    {formatCountdown(timeLeftSeconds)}
                   </span>
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
 
-          <div className="pt-3 border-t border-stone-200 dark:border-stone-800 flex justify-between items-center text-sm">
-            <span className="text-stone-500 dark:text-stone-400">Total Harga Menu:</span>
-            <span className="font-bold font-mono text-stone-900 dark:text-white">
-              {formatRupiah(order.totalPrice)}
-            </span>
-          </div>
+              {/* QRIS Method */}
+              {order.paymentMethod === 'QRIS' && (
+                <div className="space-y-3 text-center">
+                  <div className="p-3.5 bg-stone-50 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 flex flex-col items-center">
+                    <p className="text-xs font-bold text-stone-600 dark:text-stone-300 mb-2.5">
+                      Pindai QRIS Dinamis melalui M-Banking atau E-Wallet:
+                    </p>
 
-          {order.uniqueCode > 0 && (
-            <div className="flex justify-between items-center text-xs text-stone-500 dark:text-stone-400">
-              <span>Kode Unik Verifikasi:</span>
-              <span className="font-mono font-bold text-stone-700 dark:text-stone-300">
-                +{formatRupiah(order.uniqueCode)}
+                    {dynamicQrUrl ? (
+                      <div className="p-2.5 bg-white rounded-xl shadow-xs border border-stone-200 max-w-[200px]">
+                        <img
+                          src={dynamicQrUrl}
+                          alt="QRIS Dinamis Pembayaran"
+                          className="w-full h-auto aspect-square"
+                        />
+                      </div>
+                    ) : qrError ? (
+                      <div className="p-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold">
+                        {qrError}
+                      </div>
+                    ) : (
+                      <div className="w-40 h-40 rounded-xl bg-stone-200 dark:bg-stone-800 animate-pulse flex items-center justify-center">
+                        <QrCode className="w-8 h-8 text-stone-400" />
+                      </div>
+                    )}
+
+                    <div className="mt-3 space-y-0.5">
+                      <p className="text-xs text-stone-500 dark:text-stone-400">
+                        Total yang Harus Dibayar:
+                      </p>
+                      <p className="text-2xl font-black font-mono text-[#FF6B1A]">
+                        {formatRupiah(payable)}
+                      </p>
+                      {order.uniqueCode > 0 && (
+                        <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                          (Termasuk kode unik #{order.uniqueCode})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* BANK TRANSFER Method */}
+              {order.paymentMethod === 'TRANSFER' && (
+                <div className="p-3.5 bg-stone-50 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-stone-700 dark:text-stone-300 text-xs font-bold">
+                    <Building className="w-3.5 h-3.5 text-[#FF6B1A]" />
+                    <span>Rekening Tujuan Transfer:</span>
+                  </div>
+
+                  <div className="p-2.5 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-black text-stone-900 dark:text-white uppercase">
+                        {settings?.bankName || 'BANK'}
+                      </p>
+                      <p className="text-base font-black font-mono text-stone-900 dark:text-white">
+                        {settings?.bankAccountNumber || '-'}
+                      </p>
+                      <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                        a.n. {settings?.bankAccountName || 'Restoran'}
+                      </p>
+                    </div>
+
+                    {settings?.bankAccountNumber && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopy(settings.bankAccountNumber || '', 'BANK')}
+                        icon={copiedBank ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      >
+                        {copiedBank ? 'Disalin' : 'Salin'}
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-orange-50 dark:bg-orange-950/30 rounded-xl border border-orange-200 dark:border-orange-900/50 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-orange-800 dark:text-orange-300">
+                        Nominal Transfer Persis:
+                      </p>
+                      <p className="text-xl font-black font-mono text-[#FF6B1A]">
+                        {formatRupiah(payable)}
+                      </p>
+                      {order.uniqueCode > 0 && (
+                        <p className="text-[10px] text-stone-500 dark:text-stone-400">
+                          Kode unik Rp {order.uniqueCode} untuk verifikasi
+                        </p>
+                      )}
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleCopy(String(payable), 'AMOUNT')}
+                      icon={copiedAmount ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
+                    >
+                      {copiedAmount ? 'Disalin' : 'Salin Nominal'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* DI_MEJA Method */}
+              {order.paymentMethod === 'DI_MEJA' && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl text-center space-y-1">
+                  <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                    Pembayaran Tunai / QRIS di Meja
+                  </p>
+                  <p className="text-xs text-blue-800 dark:text-blue-300">
+                    Silakan siapkan pembayaran:
+                  </p>
+                  <p className="text-2xl font-black font-mono text-blue-950 dark:text-blue-100">
+                    {formatRupiah(payable)}
+                  </p>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                    Petugas kami akan melayani pembayaran saat mengantar hidangan ke Meja {order.tableNumber}.
+                  </p>
+                </div>
+              )}
+
+              {/* Tombol Saya Sudah Bayar & Klaim */}
+              {order.customerClaimedPaid ? (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Sudah konfirmasi bayar. Sedang diverifikasi kasir.</span>
+                </div>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="md"
+                  fullWidth
+                  loading={claiming}
+                  onClick={handleClaimPaid}
+                  icon={<Check className="w-4 h-4 stroke-[3]" />}
+                >
+                  Saya Sudah Bayar
+                </Button>
+              )}
+            </Card>
+          )
+        )}
+
+        {/* Bagian Lipat (Collapsible) Rincian Pesanan */}
+        <Card className="p-3.5 sm:p-4 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(!detailsOpen)}
+            className="w-full flex items-center justify-between text-left cursor-pointer group"
+            aria-expanded={detailsOpen}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Utensils className="w-4 h-4 text-[#FF6B1A] shrink-0" />
+              <span className="text-[13px] sm:text-[14px] font-bold text-stone-900 dark:text-white truncate">
+                Rincian Pesanan ({totalItemCount} item) - {formatRupiah(payable)}
               </span>
             </div>
+            <div className="text-stone-400 group-hover:text-stone-600 dark:group-hover:text-stone-200 shrink-0 ml-2">
+              {detailsOpen ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </div>
+          </button>
+
+          {detailsOpen && (
+            <div className="mt-3 pt-3 border-t border-stone-100 dark:border-stone-800 space-y-2.5 text-sm">
+              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                {order.items.map((item, idx) => (
+                  <div key={idx} className="py-2 first:pt-0">
+                    <div className="flex justify-between items-start text-xs sm:text-sm">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-bold text-[#FF6B1A] mr-1.5">{item.qty}×</span>
+                        <span className="font-semibold text-stone-900 dark:text-white">
+                          {item.name}
+                        </span>
+                        {item.note && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400 italic pl-5 mt-0.5">
+                            "{item.note}"
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-mono text-xs font-bold text-stone-700 dark:text-stone-300 shrink-0">
+                        {formatRupiah(item.price * item.qty)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-between items-center text-xs text-stone-500 dark:text-stone-400">
+                <span>Total Harga Menu:</span>
+                <span className="font-bold font-mono text-stone-900 dark:text-white">
+                  {formatRupiah(order.totalPrice)}
+                </span>
+              </div>
+
+              {order.uniqueCode > 0 && (
+                <div className="flex justify-between items-center text-xs text-stone-500 dark:text-stone-400">
+                  <span>Kode Unik Verifikasi:</span>
+                  <span className="font-mono font-bold text-stone-700 dark:text-stone-300">
+                    +{formatRupiah(order.uniqueCode)}
+                  </span>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-between items-center text-sm font-bold">
+                <span className="text-stone-900 dark:text-white">Total Tagihan:</span>
+                <span className="font-black font-mono text-[#FF6B1A]">
+                  {formatRupiah(payable)}
+                </span>
+              </div>
+            </div>
           )}
-
-          <div className="pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-between items-center font-bold">
-            <span className="text-stone-900 dark:text-white">Total Tagihan:</span>
-            <span className="text-lg font-black font-mono text-[#FF6B1A]">
-              {formatRupiah(payable)}
-            </span>
-          </div>
         </Card>
+      </main>
 
-        {/* Bottom Actions */}
-        <div className="pt-2 space-y-2">
+      {/* Sticky Bottom Bar: Tombol Kembali ke Menu selebar penuh */}
+      <div className="sticky bottom-0 z-20 bg-stone-50/95 dark:bg-[#121212]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-stone-200/80 dark:border-stone-800/80">
+        <div className="max-w-xl mx-auto">
           <Button
-            variant="outline"
+            variant="primary"
             size="lg"
             fullWidth
             onClick={() => navigate(backToMenuUrl)}
+            icon={<ArrowLeft className="w-4 h-4" />}
           >
-            Kembali ke Daftar Menu
+            Kembali ke Menu
           </Button>
-
-          {/* Pesan Lagi jika sudah lunas atau dibatalkan */}
-          {(order.paymentStatus === 'LUNAS' || isCancelled) && (
-            <Button
-              variant="primary"
-              size="lg"
-              fullWidth
-              onClick={() => navigate(backToMenuUrl)}
-              icon={<PlusCircle className="w-5 h-5" />}
-            >
-              Pesan Menu Lainnya
-            </Button>
-          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 };

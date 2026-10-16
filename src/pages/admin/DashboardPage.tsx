@@ -150,7 +150,7 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <AppShell title="DASHBOARD RESTORAN (POS)">
-      <div className="space-y-5">
+      <div className="space-y-3 sm:space-y-5">
         {/* Seed Database Banner for Admin if categories/menus are empty */}
         {profile?.role === 'ADMIN' &&
           !menusLoading &&
@@ -192,85 +192,97 @@ export const DashboardPage: React.FC = () => {
         )}
 
         {/* 6 Metric Cards Row: Total Hari Ini, Belum Lunas, Tidak Bayar, Baru, Diterima, Selesai */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-          <Card className="p-3 sm:p-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-stone-600 dark:text-stone-400">
+        <div className="grid grid-cols-2 min-[360px]:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-stone-600 dark:text-stone-400 leading-none truncate">
                 TOTAL ORDER
               </span>
-              <Utensils className="w-3.5 h-3.5 text-stone-400" />
+              <Utensils className="w-3.5 h-3.5 text-stone-400 shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-stone-900 dark:text-white mt-1">
-              {stats.total}
-            </p>
-            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Semua status</p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-stone-900 dark:text-white">
+                {stats.total}
+              </span>
+              <span className="text-[10px] text-stone-400 truncate leading-none">Semua</span>
+            </div>
           </Card>
 
-          <Card className="p-3 sm:p-3.5 bg-red-500/10 border-red-500/20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-red-600 dark:text-red-400">
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between bg-red-500/10 border-red-500/20">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-red-600 dark:text-red-400 leading-none truncate">
                 BELUM LUNAS
               </span>
-              <CreditCard className="w-3.5 h-3.5 text-red-500" />
+              <CreditCard className="w-3.5 h-3.5 text-red-500 shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-red-600 dark:text-red-400 mt-1">
-              {stats.belumLunasCount}
-            </p>
-            <p className="text-[10px] font-mono text-red-700 dark:text-red-300 truncate mt-0.5">
-              {formatRupiah(stats.belumLunasAmount)}
-            </p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-red-600 dark:text-red-400">
+                {stats.belumLunasCount}
+              </span>
+              <span className="text-[10px] font-mono text-red-700 dark:text-red-300 truncate leading-none">
+                {formatRupiah(stats.belumLunasAmount)}
+              </span>
+            </div>
           </Card>
 
-          <Card className="p-3 sm:p-3.5 bg-stone-500/10 border-stone-500/20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-stone-600 dark:text-stone-400">
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between bg-stone-500/10 border-stone-500/20">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-stone-600 dark:text-stone-400 leading-none truncate">
                 TIDAK BAYAR
               </span>
-              <AlertTriangle className="w-3.5 h-3.5 text-stone-400" />
+              <AlertTriangle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-stone-700 dark:text-stone-300 mt-1">
-              {stats.tidakBayarHariIni}
-            </p>
-            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Dibatalkan</p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-stone-700 dark:text-stone-300">
+                {stats.tidakBayarHariIni}
+              </span>
+              <span className="text-[10px] text-stone-400 truncate leading-none">Dibatalkan</span>
+            </div>
           </Card>
 
-          <Card className="p-3 sm:p-3.5 bg-orange-500/10 border-orange-500/20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-[#FF6B1A]">BARU</span>
-              <Bell className="w-3.5 h-3.5 text-[#FF6B1A] animate-bounce" />
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between bg-orange-500/10 border-orange-500/20">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-[#FF6B1A] leading-none truncate">BARU</span>
+              <Bell className="w-3.5 h-3.5 text-[#FF6B1A] animate-bounce shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-[#FF6B1A] mt-1">
-              {stats.baru}
-            </p>
-            <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-0.5 truncate">
-              Konfirmasi
-            </p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-[#FF6B1A]">
+                {stats.baru}
+              </span>
+              <span className="text-[10px] text-stone-500 dark:text-stone-400 truncate leading-none">
+                Konfirmasi
+              </span>
+            </div>
           </Card>
 
-          <Card className="p-3 sm:p-3.5 bg-blue-500/10 border-blue-500/20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-blue-600 dark:text-blue-400">
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between bg-blue-500/10 border-blue-500/20">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 leading-none truncate">
                 DITERIMA
               </span>
-              <Utensils className="w-3.5 h-3.5 text-blue-500" />
+              <Utensils className="w-3.5 h-3.5 text-blue-500 shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-blue-600 dark:text-blue-400 mt-1">
-              {stats.diterima}
-            </p>
-            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Disiapkan</p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-blue-600 dark:text-blue-400">
+                {stats.diterima}
+              </span>
+              <span className="text-[10px] text-stone-400 truncate leading-none">Disiapkan</span>
+            </div>
           </Card>
 
-          <Card className="p-3 sm:p-3.5 bg-emerald-500/10 border-emerald-500/20">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+          <Card className="h-[68px] sm:h-auto p-2 sm:p-3.5 flex flex-col justify-between bg-emerald-500/10 border-emerald-500/20">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 leading-none truncate">
                 SELESAI
               </span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             </div>
-            <p className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-              {stats.selesai}
-            </p>
-            <p className="text-[10px] text-stone-400 mt-0.5 truncate">Tuntas</p>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-[20px] sm:text-2xl font-black font-mono leading-none text-emerald-600 dark:text-emerald-400">
+                {stats.selesai}
+              </span>
+              <span className="text-[10px] text-stone-400 truncate leading-none">Tuntas</span>
+            </div>
           </Card>
         </div>
 
@@ -342,7 +354,7 @@ export const DashboardPage: React.FC = () => {
             description="Belum ada pesanan yang sesuai dengan filter atau pencarian saat ini."
           />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {sortedOrders.map((order) => (
               <OrderCard
                 key={order.id}

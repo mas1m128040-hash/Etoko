@@ -30,16 +30,16 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 border font-semibold ${
+      className={`inline-flex items-center gap-1.5 border font-semibold whitespace-nowrap shrink-0 ${
         config.bg
       } ${config.text} ${config.border} ${sizeClasses[size]} ${
         isBaru ? 'animate-pulse ring-2 ring-orange-500/30' : ''
       } ${className}`}
     >
       {isBaru && (
-        <span className="w-2 h-2 rounded-full bg-[#FF6B1A] animate-ping shrink-0" />
+        <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B1A] animate-ping shrink-0" />
       )}
-      <span>{ORDER_STATUS_LABELS[status] || status}</span>
+      <span className="whitespace-nowrap">{ORDER_STATUS_LABELS[status] || status}</span>
     </span>
   );
 };

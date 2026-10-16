@@ -136,6 +136,17 @@ export const MenuPage: React.FC = () => {
     }
   }, [searchParams, tableNumber, setTableNumber, clearCart]);
 
+  // Bersihkan referensi lokal pesanan aktif jika pesanan sudah tidak ditampilkan
+  useEffect(() => {
+    const savedActiveOrderId = localStorage.getItem('smart_resto_active_order_id');
+    if (savedActiveOrderId && customerOrders.length > 0) {
+      const stillVisible = customerOrders.some((o) => o.id === savedActiveOrderId);
+      if (!stillVisible) {
+        localStorage.removeItem('smart_resto_active_order_id');
+      }
+    }
+  }, [customerOrders]);
+
   const handleOpenItemDetail = (menu: Menu) => {
     if (!menu.available) return;
     const existing = cartItems.find((i) => i.menuId === menu.id);
