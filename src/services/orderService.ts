@@ -93,10 +93,13 @@ export const orderService = {
    * 4. Menghitung uniqueCode dan payableAmount
    * 5. Creates new order document
    */
-  async createOrder(params: CreateOrderParams): Promise<Order> {
+  async createOrder(params: CreateOrderParams, clientOrderId?: string): Promise<Order> {
     const dateKey = getDateKeyJakarta(new Date());
     const counterRef = doc(db, COUNTERS_COL, dateKey);
-    const orderRef = doc(collection(db, ORDERS_COL));
+
+    // Buat id dokumen pesanan di klien SEBELUM transaksi dimulai (mencegah duplikasi saat retry)
+    const orderId = clientOrderId || doc(collection(db, ORDERS_COL)).id;
+    const orderRef = doc(db, ORDERS_COL, orderId);
 
     // Validate params
     if (!params.customerName.trim()) {
@@ -128,65 +131,94 @@ export const orderService = {
       0
     );
 
-    const createdOrder = await runTransaction(db, async (tx) => {
-      const counterSnap = await tx.get(counterRef);
-      let nextNumber = 1;
-      if (counterSnap.exists()) {
-        const currentLast = counterSnap.data().lastNumber;
-        if (typeof currentLast === 'number') {
-          nextNumber = currentLast + 1;
+    let lastError: any = null;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const createdOrder = await runTransaction(db, async (tx) => {
+          // Cek idempotensi: jika orderId sudah dibuat pada percobaan sebelumnya
+          const existingSnap = await tx.get(orderRef);
+          if (existingSnap.exists()) {
+            return {
+              id: orderRef.id,
+              ...existingSnap.data(),
+            } as Order;
+          }
+
+          const counterSnap = await tx.get(counterRef);
+          let nextNumber = 1;
+          if (counterSnap.exists()) {
+            const currentLast = counterSnap.data().lastNumber;
+            if (typeof currentLast === 'number') {
+              nextNumber = currentLast + 1;
+            }
+          }
+
+          const orderCode = formatOrderCode(nextNumber);
+
+          // Hitung kode unik jika QRIS / TRANSFER dan opsi aktif
+          let uniqueCode = 0;
+          let payableAmount = calculatedTotal;
+
+          if (params.paymentMethod === 'QRIS' || params.paymentMethod === 'TRANSFER') {
+            if (params.useUniqueCode !== false) {
+              uniqueCode = (nextNumber % 99) + 1;
+              payableAmount = calculatedTotal + uniqueCode;
+            }
+          }
+
+          const newOrderPayload: Omit<Order, 'id'> = {
+            orderNumber: nextNumber,
+            orderCode,
+            dateKey,
+            customerName: params.customerName.trim().slice(0, 50),
+            tableNumber: params.tableNumber.trim(),
+            customerUid: params.customerUid,
+            items: params.items.map((i) => ({
+              menuId: i.menuId,
+              name: i.name,
+              price: i.price,
+              qty: Math.min(20, Math.max(1, i.qty)),
+              note: (i.note || '').slice(0, 100),
+            })),
+            totalPrice: calculatedTotal,
+            notes: (params.notes || '').slice(0, 300),
+            status: 'BARU',
+            paymentMethod: params.paymentMethod,
+            uniqueCode,
+            payableAmount,
+            paymentStatus: 'BELUM_BAYAR',
+            customerClaimedPaid: false,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+          tx.set(counterRef, { lastNumber: nextNumber }, { merge: true });
+          tx.set(orderRef, newOrderPayload);
+
+          return {
+            id: orderRef.id,
+            ...newOrderPayload,
+          } as Order;
+        });
+
+        return createdOrder;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Order Transaction Attempt ${attempt} failed]:`, err?.code || err?.message);
+
+        // Jika gagal karena benturan, coba lagi otomatis hingga 3 kali dengan jeda acak (jitter)
+        if (attempt < maxRetries) {
+          const jitterMs = Math.floor(Math.random() * (500 - 150 + 1)) + 150;
+          await new Promise((resolve) => setTimeout(resolve, jitterMs));
         }
       }
+    }
 
-      const orderCode = formatOrderCode(nextNumber);
-
-      // Hitung kode unik jika QRIS / TRANSFER dan opsi aktif
-      let uniqueCode = 0;
-      let payableAmount = calculatedTotal;
-
-      if (params.paymentMethod === 'QRIS' || params.paymentMethod === 'TRANSFER') {
-        if (params.useUniqueCode !== false) {
-          uniqueCode = (nextNumber % 99) + 1;
-          payableAmount = calculatedTotal + uniqueCode;
-        }
-      }
-
-      const newOrderPayload: Omit<Order, 'id'> = {
-        orderNumber: nextNumber,
-        orderCode,
-        dateKey,
-        customerName: params.customerName.trim().slice(0, 50),
-        tableNumber: params.tableNumber.trim(),
-        customerUid: params.customerUid,
-        items: params.items.map((i) => ({
-          menuId: i.menuId,
-          name: i.name,
-          price: i.price,
-          qty: Math.min(20, Math.max(1, i.qty)),
-          note: (i.note || '').slice(0, 100),
-        })),
-        totalPrice: calculatedTotal,
-        notes: (params.notes || '').slice(0, 300),
-        status: 'BARU',
-        paymentMethod: params.paymentMethod,
-        uniqueCode,
-        payableAmount,
-        paymentStatus: 'BELUM_BAYAR',
-        customerClaimedPaid: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      tx.set(counterRef, { lastNumber: nextNumber }, { merge: true });
-      tx.set(orderRef, newOrderPayload);
-
-      return {
-        id: orderRef.id,
-        ...newOrderPayload,
-      } as Order;
-    });
-
-    return createdOrder;
+    throw new Error(
+      'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba lagi.'
+    );
   },
 
   /**
@@ -267,7 +299,10 @@ export const orderService = {
 
       const current = snap.data() as Order;
       if (current.status !== expectedCurrentStatus) {
-        const who = current.acceptedBy?.name || 'admin';
+        const who = current.acceptedBy?.name || 'admin lain';
+        if (current.status === 'DITERIMA') {
+          throw new Error(`Pesanan sudah diterima oleh ${who}`);
+        }
         throw new Error(
           `Pesanan sudah diubah menjadi "${current.status}" oleh ${who}.`
         );

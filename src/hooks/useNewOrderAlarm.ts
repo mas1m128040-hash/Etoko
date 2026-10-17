@@ -6,13 +6,93 @@ import { audioEngine } from '../lib/audioEngine';
 import { useSoundStore } from '../store/soundStore';
 import { useAuth } from './useAuth';
 import { DEFAULT_SETTINGS } from '../config/constants';
-import { formatRupiah, formatVoiceOrderText } from '../lib/formatters';
+import { formatVoiceOrderText } from '../lib/formatters';
+
+// ============================================================================
+// SINGLETON STORE & AUDIO CONTROLLER
+// Mencegah multiple Firestore subscription dan multiple audio loops
+// ============================================================================
+let sharedNewOrders: Order[] = [];
+let sharedLoading = true;
+let sharedSettings: Settings = DEFAULT_SETTINGS;
+let activeSubscribers = 0;
+let unsubscribeFirestore: (() => void) | null = null;
+let unsubscribeSettings: (() => void) | null = null;
+const stateListeners = new Set<() => void>();
+
+let originalDocumentTitle =
+  typeof document !== 'undefined' ? document.title : 'SMART RESTAURANT ORDER SYSTEM';
+let titleFlashTimer: number | null = null;
+
+function notifySubscribers() {
+  stateListeners.forEach((fn) => fn());
+}
+
+function syncAudioAndTitle(
+  orders: Order[],
+  settings: Settings,
+  soundEnabled: boolean,
+  isMuted: boolean,
+  isAudioContextActive: boolean,
+  volume: number
+) {
+  const hasNewOrders = orders.length > 0;
+
+  // 1. Audio loop synchronization
+  // Hanya berbunyi berulang jika ADA pesanan berstatus BARU
+  if (hasNewOrders && soundEnabled && !isMuted && isAudioContextActive) {
+    audioEngine.setVolume(volume);
+
+    const oldest = orders[0];
+    const template =
+      settings.alarmVoiceText ||
+      'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
+
+    const formattedVoiceText = oldest
+      ? formatVoiceOrderText(template, {
+          orderCode: oldest.orderCode,
+          tableNumber: oldest.tableNumber,
+          customerName: oldest.customerName,
+          payableAmount: oldest.payableAmount,
+          totalPrice: oldest.totalPrice,
+          items: oldest.items,
+        })
+      : template;
+
+    audioEngine.startRepeatingAlarm({
+      tone: settings.alarmTone || 'DEFAULT',
+      mode: settings.alarmMode || 'NADA',
+      voiceText: formattedVoiceText,
+      volume,
+    });
+  } else {
+    audioEngine.stopRepeatingAlarm();
+  }
+
+  // 2. Tab title flashing
+  if (typeof document !== 'undefined') {
+    if (hasNewOrders) {
+      if (!titleFlashTimer) {
+        let toggle = false;
+        titleFlashTimer = window.setInterval(() => {
+          toggle = !toggle;
+          document.title = toggle
+            ? `(${orders.length}) PESANAN BARU MASUK!`
+            : `🔔 RESTO NOTIFIKASI (${orders.length})`;
+        }, 1000);
+      }
+    } else {
+      if (titleFlashTimer) {
+        clearInterval(titleFlashTimer);
+        titleFlashTimer = null;
+      }
+      document.title = originalDocumentTitle;
+    }
+  }
+}
 
 export function useNewOrderAlarm() {
-  const [newOrders, setNewOrders] = useState<Order[]>([]);
-  const [isAlarmSounding, setIsAlarmSounding] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [, setRerender] = useState(0);
 
   const {
     soundEnabled,
@@ -23,109 +103,75 @@ export function useNewOrderAlarm() {
   } = useSoundStore();
 
   const { profile } = useAuth();
-  const prevCountRef = useRef<number>(0);
-  const originalTitleRef = useRef<string>(
-    typeof document !== 'undefined' ? document.title : 'SMART RESTAURANT ORDER SYSTEM'
-  );
-  const titleFlashIntervalRef = useRef<number | null>(null);
+  const isMuted = isCurrentlyMuted();
 
-  // 1. Subscribe to settings for alarmTone, alarmMode, alarmVoiceText
+  // Lifecycle singleton subscription
   useEffect(() => {
-    const unsubscribeSettings = settingsService.subscribeSettings((s) => {
-      setSettings(s);
-    });
-    return () => unsubscribeSettings();
-  }, []);
+    activeSubscribers++;
 
-  // 2. Subscribe to BARU orders realtime
-  useEffect(() => {
-    const unsubscribe = orderService.subscribeNewOrders((orders) => {
-      setNewOrders(orders);
-      setLoading(false);
-    });
+    const listener = () => setRerender((v) => v + 1);
+    stateListeners.add(listener);
 
-    return () => unsubscribe();
-  }, []);
-
-  // 3. Sound state synchronization: derived from data!
-  // Alarm tetap berbunyi berulang selama ada pesanan berstatus BARU dan berhenti hanya setelah "Terima Pesanan" ditekan
-  useEffect(() => {
-    const hasNewOrders = newOrders.length > 0;
-    const isMuted = isCurrentlyMuted();
-
-    // Check AudioContext state
-    const isCtxRunning = audioEngine.isContextRunning();
-    setAudioContextActive(isCtxRunning);
-
-    if (hasNewOrders && soundEnabled && !isMuted && isCtxRunning) {
-      setIsAlarmSounding(true);
-      audioEngine.setVolume(volume);
-
-      // Oldest order for voice text placeholder replacement
-      const oldest = newOrders[0];
-      const template =
-        settings.alarmVoiceText ||
-        'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
-
-      const formattedVoiceText = oldest
-        ? formatVoiceOrderText(template, {
-            orderCode: oldest.orderCode,
-            tableNumber: oldest.tableNumber,
-            customerName: oldest.customerName,
-            payableAmount: oldest.payableAmount,
-            totalPrice: oldest.totalPrice,
-            items: oldest.items,
-          })
-        : template;
-
-      audioEngine.startRepeatingAlarm({
-        tone: settings.alarmTone || 'DEFAULT',
-        mode: settings.alarmMode || 'NADA',
-        voiceText: formattedVoiceText,
-        volume,
+    // Buka listener Firestore jika pelanggan pertama terpasang
+    if (activeSubscribers === 1) {
+      unsubscribeSettings = settingsService.subscribeSettings((s) => {
+        sharedSettings = s;
+        notifySubscribers();
       });
-    } else {
-      setIsAlarmSounding(false);
-      audioEngine.stopRepeatingAlarm();
-    }
 
-    // 4. Tab title flashing
-    if (hasNewOrders) {
-      if (!titleFlashIntervalRef.current) {
-        let toggle = false;
-        titleFlashIntervalRef.current = window.setInterval(() => {
-          toggle = !toggle;
-          document.title = toggle
-            ? `(${newOrders.length}) PESANAN BARU MASUK!`
-            : `🔔 RESTO NOTIFIKASI (${newOrders.length})`;
-        }, 1000);
-      }
-    } else {
-      if (titleFlashIntervalRef.current) {
-        clearInterval(titleFlashIntervalRef.current);
-        titleFlashIntervalRef.current = null;
-      }
-      document.title = originalTitleRef.current;
+      unsubscribeFirestore = orderService.subscribeNewOrders((orders) => {
+        // ATURAN UTAMA: Hanya pesanan dengan status 'BARU' yang masuk antrean newOrders
+        // Perubahan dokumen non-BARU sama sekali tidak memengaruhi list ini
+        const onlyBaruOrders = orders.filter((o) => o.status === 'BARU');
+        sharedNewOrders = onlyBaruOrders;
+        sharedLoading = false;
+        notifySubscribers();
+      });
     }
-
-    prevCountRef.current = newOrders.length;
 
     return () => {
-      audioEngine.stopRepeatingAlarm();
-      if (titleFlashIntervalRef.current) {
-        clearInterval(titleFlashIntervalRef.current);
-        titleFlashIntervalRef.current = null;
+      stateListeners.delete(listener);
+      activeSubscribers--;
+
+      // Tutup listener jika tidak ada lagi komponen yang membutuhkan
+      if (activeSubscribers === 0) {
+        if (unsubscribeFirestore) {
+          unsubscribeFirestore();
+          unsubscribeFirestore = null;
+        }
+        if (unsubscribeSettings) {
+          unsubscribeSettings();
+          unsubscribeSettings = null;
+        }
+        audioEngine.stopRepeatingAlarm();
+        if (titleFlashTimer) {
+          clearInterval(titleFlashTimer);
+          titleFlashTimer = null;
+        }
+        if (typeof document !== 'undefined') {
+          document.title = originalDocumentTitle;
+        }
       }
     };
-  }, [
-    newOrders,
-    soundEnabled,
-    volume,
-    settings,
-    isCurrentlyMuted,
-    isAudioContextActive,
-    setAudioContextActive,
-  ]);
+  }, []);
+
+  // Update running AudioContext state
+  useEffect(() => {
+    const isCtxRunning = audioEngine.isContextRunning();
+    setAudioContextActive(isCtxRunning);
+  }, [setAudioContextActive]);
+
+  // Synchronize audio state whenever newOrders, settings, volume, or mute state changes
+  useEffect(() => {
+    syncAudioAndTitle(
+      sharedNewOrders,
+      sharedSettings,
+      soundEnabled,
+      isMuted,
+      isAudioContextActive,
+      volume
+    );
+  }, [sharedNewOrders, sharedSettings, soundEnabled, isMuted, isAudioContextActive, volume]);
 
   const acceptSingleOrder = async (orderId: string) => {
     if (!profile) return;
@@ -142,18 +188,18 @@ export function useNewOrderAlarm() {
 
   const acceptAllNewOrders = async () => {
     if (!profile) return;
-    await orderService.acceptAllNewOrders(newOrders, {
+    await orderService.acceptAllNewOrders(sharedNewOrders, {
       uid: profile.id,
       name: profile.name,
     });
   };
 
   return {
-    newOrders,
-    hasNewOrders: newOrders.length > 0,
-    newOrdersCount: newOrders.length,
-    isAlarmSounding,
-    loading,
+    newOrders: sharedNewOrders,
+    hasNewOrders: sharedNewOrders.length > 0,
+    newOrdersCount: sharedNewOrders.length,
+    isAlarmSounding: sharedNewOrders.length > 0 && soundEnabled && !isMuted,
+    loading: sharedLoading,
     acceptSingleOrder,
     acceptAllNewOrders,
   };

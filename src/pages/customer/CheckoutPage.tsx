@@ -29,7 +29,8 @@ import { orderService } from '../../services/orderService';
 import { settingsService } from '../../services/settingsService';
 import { menuService } from '../../services/menuService';
 import { authService } from '../../services/authService';
-import { auth } from '../../config/firebase';
+import { collection, doc } from 'firebase/firestore';
+import { auth, db } from '../../config/firebase';
 import { Settings, Order, PaymentMethod } from '../../types';
 import { formatRupiah } from '../../lib/formatters';
 import { isValidQrisPayload, generateDynamicQris } from '../../lib/qris';
@@ -679,30 +680,35 @@ export const CheckoutPage: React.FC = () => {
         );
       }
 
-      // 4. Atomic create order in Firestore
-      const newOrder = await orderService.createOrder({
-        customerName: customerName.trim(),
-        tableNumber: tableNumber.trim(),
-        customerUid: currentUid,
-        paymentMethod,
-        items,
-        notes: orderNotes.trim(),
-        useUniqueCode: settings?.useUniqueCode ?? true,
-      });
+      // 4. Buat ID dokumen pesanan di klien SEBELUM transaksi dimulai (mencegah duplikasi saat retry)
+      const clientOrderId = doc(collection(db, 'orders')).id;
 
-      // 5. Update cooldown and clear cart
+      const newOrder = await orderService.createOrder(
+        {
+          customerName: customerName.trim(),
+          tableNumber: tableNumber.trim(),
+          customerUid: currentUid,
+          paymentMethod,
+          items,
+          notes: orderNotes.trim(),
+          useUniqueCode: settings?.useUniqueCode ?? true,
+        },
+        clientOrderId
+      );
+
+      // 5. Update cooldown dan kosongkan keranjang HANYA setelah transaksi berhasil dikomit
       setLastOrderTime(Date.now());
       clearCart();
       localStorage.setItem('smart_resto_active_order_id', newOrder.id);
       sessionStorage.setItem('smart_resto_active_order_id', newOrder.id);
 
-      // 6. Show success screen "Pesanan Terkirim"
+      // 6. Tampilkan layar "Pesanan Terkirim"
       setSubmittedOrder(newOrder);
     } catch (err: any) {
       console.error('[Create Order Error]', err);
       setErrorMessage(
         err?.message ||
-          'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba kirim lagi.'
+          'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba lagi.'
       );
     } finally {
       setLoading(false);

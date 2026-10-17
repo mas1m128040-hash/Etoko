@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Bell,
   CheckCircle2,
@@ -129,15 +129,36 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  // Sort: BARU orders strictly on top, then DITERIMA, then others
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    const priority = (s: OrderStatus) => {
-      if (s === 'BARU') return 1;
-      if (s === 'DITERIMA') return 2;
-      return 3;
-    };
-    return priority(a.status) - priority(b.status);
-  });
+  // Urutan dashboard: pesanan BARU di paling atas, diurutkan dari yang TERTUA (createdAt naik), lalu DITERIMA, lalu sisanya
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const priority = (s: OrderStatus) => {
+        if (s === 'BARU') return 1;
+        if (s === 'DITERIMA') return 2;
+        return 3;
+      };
+      const prioDiff = priority(a.status) - priority(b.status);
+      if (prioDiff !== 0) return prioDiff;
+
+      const timeA = a.createdAt?.toMillis
+        ? a.createdAt.toMillis()
+        : a.createdAt?.seconds
+        ? a.createdAt.seconds * 1000
+        : 0;
+      const timeB = b.createdAt?.toMillis
+        ? b.createdAt.toMillis()
+        : b.createdAt?.seconds
+        ? b.createdAt.seconds * 1000
+        : 0;
+
+      // BARU: urutkan dari yang TERTUA (createdAt naik)
+      if (a.status === 'BARU') {
+        return timeA - timeB;
+      }
+      // DITERIMA & status lainnya: urutkan dari yang terbaru (createdAt turun)
+      return timeB - timeA;
+    });
+  }, [filteredOrders]);
 
   // Filter chips: Aktif, Belum Bayar, Selesai, Dibatalkan, Semua
   const filterOptions: { key: string; label: string; count: number }[] = [
@@ -285,6 +306,21 @@ export const DashboardPage: React.FC = () => {
             </div>
           </Card>
         </div>
+
+        {/* Chip Antrean: N pesanan menunggu diterima bila ada pesanan BARU */}
+        {stats.baru > 0 && (
+          <div className="flex items-center justify-between p-3 px-4 rounded-2xl bg-orange-500/15 border-2 border-[#FF6B1A]/40 text-[#FF6B1A] shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B1A] animate-ping shrink-0" />
+              <span className="text-xs sm:text-sm font-black tracking-wide">
+                {stats.baru} pesanan menunggu diterima
+              </span>
+            </div>
+            <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300">
+              Antrean 1 dari {stats.baru} (tertua teratas)
+            </span>
+          </div>
+        )}
 
         {/* Filter Chips & Search Bar */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">

@@ -63,6 +63,12 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const [itemsExpanded, setItemsExpanded] = useState(false);
   // Toggle expand single row for SELESAI & DIBATALKAN
   const [rowExpanded, setRowExpanded] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     settingsService
@@ -84,7 +90,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     : order.createdAt?.seconds
     ? order.createdAt.seconds * 1000
     : Date.now();
-  const minutesElapsed = Math.floor((Date.now() - createdAtMs) / (60 * 1000));
+  const minutesElapsed = Math.max(0, Math.floor((currentTime - createdAtMs) / (60 * 1000)));
   const isOverdueUnpaid = !isLunas && !isDibatalkan && minutesElapsed >= timeoutMinutes;
 
   const payable = order.payableAmount || order.totalPrice;
@@ -366,8 +372,28 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             : ''
         }`}
       >
+        {/* Banner Kuning Menetap Klaim Bayar (hilang setelah Tandai Lunas) */}
+        {order.customerClaimedPaid && !isLunas && (
+          <div className="p-2.5 sm:p-3 bg-amber-500/20 border-b border-amber-500/40 text-amber-950 dark:text-amber-200 text-xs sm:text-sm font-bold flex items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+              <span className="truncate">
+                CUSTOMER MENGKLAIM SUDAH BAYAR - cek dana masuk {formatRupiah(payable)}
+              </span>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowMarkPaidModal(true)}
+              className="py-1 px-2.5 text-xs font-bold min-h-[32px] shrink-0"
+            >
+              Tandai Lunas
+            </Button>
+          </div>
+        )}
+
         <div className="p-3.5 sm:p-4 space-y-2.5">
-          {/* BARIS 1: Nomor order, lencana meja, dan lencana status (boleh turun baris, tidak boleh terpotong) */}
+          {/* BARIS 1: Nomor order, lencana meja, durasi tunggu (jika BARU), dan lencana status */}
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <div className="flex items-center gap-2">
               <span className="text-[clamp(1.1rem,2.8vw,1.3rem)] font-black font-mono tracking-tight text-stone-900 dark:text-white leading-none">
@@ -379,7 +405,23 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               </div>
             </div>
 
-            <StatusBadge status={order.status} size="sm" className="shrink-0" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {isBaru && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold border ${
+                    minutesElapsed >= 5
+                      ? 'bg-red-500/15 border-red-500/40 text-red-600 dark:text-red-400 animate-pulse'
+                      : minutesElapsed >= 2
+                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400'
+                      : 'bg-stone-100 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300'
+                  }`}
+                >
+                  <Clock className="w-3 h-3 shrink-0" />
+                  <span>Menunggu {minutesElapsed >= 1 ? `${minutesElapsed} menit` : '< 1 menit'}</span>
+                </span>
+              )}
+              <StatusBadge status={order.status} size="sm" className="shrink-0" />
+            </div>
           </div>
 
           {/* BARIS 2: Nama dan jam dengan teks kecil redup */}
