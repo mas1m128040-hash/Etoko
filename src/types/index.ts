@@ -114,6 +114,7 @@ export interface Settings {
   alarmMode: AlarmMode;
   alarmVoiceText: string;
   paymentVoiceText?: string;
+  readyVoiceText?: string;
 }
 
 export interface CartItem extends OrderItem {

@@ -52,11 +52,17 @@ export const OrderStatusPage: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
   const prevPaymentStatusRef = useRef<string | undefined>(undefined);
 
-  // 1. Ensure anonymous session
+  const [currentUid, setCurrentUid] = useState<string | null>(auth.currentUser?.uid || null);
+
+  // 1. Ensure anonymous session and track active UID
   useEffect(() => {
+    const unsub = authService.onAuthStateChanged((user) => {
+      setCurrentUid(user?.uid || null);
+    });
     authService.signInCustomerAnon().catch((err) => {
       console.warn('Login anonim warning:', err);
     });
+    return () => unsub();
   }, []);
 
   // 2. Load settings
@@ -87,12 +93,13 @@ export const OrderStatusPage: React.FC = () => {
           // Putar chime merdu + getar singkat bila pembayaran dikonfirmasi LUNAS oleh admin
           audioEngine.playPaymentSuccessChime();
         }
+
         if (fetchedOrder) {
-          const currentUid = auth.currentUser?.uid;
+          const activeUid = auth.currentUser?.uid || currentUid;
           // Verifikasi di klien bahwa customerUid pesanan sama dengan uid saat ini; bila tidak, jangan ditampilkan dan bersihkan referensinya
-          if (currentUid && fetchedOrder.customerUid !== currentUid) {
+          if (activeUid && fetchedOrder.customerUid !== activeUid) {
             console.warn('[OrderStatusPage] Pesanan ini bukan milik akun aktif. Membersihkan referensi lokal.');
-            clearActiveOrderForUser(currentUid);
+            clearActiveOrderForUser(activeUid);
             setOrder(null);
             setError('Anda tidak memiliki akses ke pesanan ini.');
             setLoading(false);
@@ -100,7 +107,7 @@ export const OrderStatusPage: React.FC = () => {
           }
 
           prevPaymentStatusRef.current = fetchedOrder.paymentStatus;
-          handleSingleOrderStatusCleanup(fetchedOrder, currentUid);
+          handleSingleOrderStatusCleanup(fetchedOrder, activeUid || undefined);
         }
 
         setOrder(fetchedOrder);
@@ -127,7 +134,17 @@ export const OrderStatusPage: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [orderId]);
+  }, [orderId, currentUid]);
+
+  // Reactive verification: jika order sudah termuat dan UID baru saja terselesaikan
+  useEffect(() => {
+    if (order && currentUid && order.customerUid !== currentUid) {
+      console.warn('[OrderStatusPage] Mismatch UID terdeteksi setelah otentikasi. Membersihkan referensi lokal.');
+      clearActiveOrderForUser(currentUid);
+      setOrder(null);
+      setError('Anda tidak memiliki akses ke pesanan ini.');
+    }
+  }, [order, currentUid]);
 
   // 4. Generate dynamic QRIS if payment method is QRIS and order is unpaid
   useEffect(() => {
@@ -264,11 +281,11 @@ export const OrderStatusPage: React.FC = () => {
     );
   }
 
-  const currentUid = auth.currentUser?.uid;
+  const activeUid = auth.currentUser?.uid || currentUid;
 
   // Verifikasi di klien bahwa customerUid pesanan sama dengan uid saat ini; bila tidak, jangan ditampilkan dan bersihkan referensinya
-  if (currentUid && order.customerUid !== currentUid) {
-    clearActiveOrderForUser(currentUid);
+  if (activeUid && order.customerUid !== activeUid) {
+    clearActiveOrderForUser(activeUid);
     return (
       <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
         <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">

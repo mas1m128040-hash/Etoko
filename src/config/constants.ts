@@ -22,7 +22,9 @@ export const DEFAULT_SETTINGS: Settings = {
   alarmMode: 'NADA',
   alarmVoiceText: 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.',
   paymentVoiceText:
-    'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.',
+    'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek dana masuk.',
+  readyVoiceText:
+    'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.',
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
