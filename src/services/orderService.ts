@@ -38,29 +38,27 @@ export interface CreateOrderParams {
 export const orderService = {
   /**
    * Cek apakah customer memiliki pesanan aktif yang belum lunas dan belum dibatalkan
-   * Mengutamakan data langsung dari server agar tidak membaca cache basi
+   * Menggunakan query hanya berdasarkan customerUid, dan aman dari error jaringan
    */
   async checkActiveUnpaidOrder(customerUid: string): Promise<Order | null> {
     if (!customerUid) return null;
-    const q = query(
-      collection(db, ORDERS_COL),
-      where('customerUid', '==', customerUid),
-      where('paymentStatus', '==', 'BELUM_BAYAR')
-    );
     try {
-      const snap = await getDocsFromServer(q);
-      const unpaid = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as Order))
-        .filter((o) => o.status !== 'DIBATALKAN');
-
-      return unpaid.length > 0 ? unpaid[0] : null;
-    } catch {
+      const q = query(
+        collection(db, ORDERS_COL),
+        where('customerUid', '==', customerUid)
+      );
       const snap = await getDocs(q);
       const unpaid = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Order))
-        .filter((o) => o.status !== 'DIBATALKAN');
+        .filter(
+          (o) => o.paymentStatus === 'BELUM_BAYAR' && o.status !== 'DIBATALKAN'
+        );
 
       return unpaid.length > 0 ? unpaid[0] : null;
+    } catch (err) {
+      // Bila pengecekan ini sendiri error, catat ke console dan lanjutkan checkout
+      console.warn('[orderService.checkActiveUnpaidOrder warning]:', err);
+      return null;
     }
   },
 
@@ -97,7 +95,7 @@ export const orderService = {
     const dateKey = getDateKeyJakarta(new Date());
     const counterRef = doc(db, COUNTERS_COL, dateKey);
 
-    // Buat id dokumen pesanan di klien SEBELUM transaksi dimulai (mencegah duplikasi saat retry)
+    // ID pesanan memakai auto-ID Firestore dibuat SEKALI dan dipakai ulang saat retry
     const orderId = clientOrderId || doc(collection(db, ORDERS_COL)).id;
     const orderRef = doc(db, ORDERS_COL, orderId);
 
@@ -119,11 +117,19 @@ export const orderService = {
     }
 
     // Pencegahan: Cek apakah ada pesanan belum lunas yang masih aktif
-    const existingUnpaid = await this.checkActiveUnpaidOrder(params.customerUid);
-    if (existingUnpaid) {
-      throw new Error(
-        `Selesaikan pembayaran pesanan #${existingUnpaid.orderCode} dulu sebelum membuat pesanan baru.`
-      );
+    // Bila pengecekan ini error, catat ke console dan lanjutkan checkout, jangan menggagalkan
+    try {
+      const existingUnpaid = await this.checkActiveUnpaidOrder(params.customerUid);
+      if (existingUnpaid) {
+        throw new Error(
+          `Selesaikan pembayaran pesanan #${existingUnpaid.orderCode} dulu sebelum membuat pesanan baru.`
+        );
+      }
+    } catch (checkErr: any) {
+      if (checkErr?.message?.includes('Selesaikan pembayaran')) {
+        throw checkErr;
+      }
+      console.warn('[createOrder checkActiveUnpaidOrder warning]:', checkErr);
     }
 
     const calculatedTotal = params.items.reduce(
@@ -140,10 +146,17 @@ export const orderService = {
           // Cek idempotensi: jika orderId sudah dibuat pada percobaan sebelumnya
           const existingSnap = await tx.get(orderRef);
           if (existingSnap.exists()) {
-            return {
-              id: orderRef.id,
-              ...existingSnap.data(),
-            } as Order;
+            const existingData = existingSnap.data() as Order;
+            // Jika dokumen dengan id itu sudah ada dan customerUid-nya sama dengan uid saat ini, anggap berhasil dan lanjut
+            if (existingData.customerUid === params.customerUid) {
+              return {
+                ...existingData,
+                id: orderRef.id,
+              } as Order;
+            } else {
+              // Jangan menimpa dokumen yang sudah ada milik customer lain
+              throw new Error('ID pesanan benturan. Silakan coba lagi.');
+            }
           }
 
           const counterSnap = await tx.get(counterRef);
@@ -206,7 +219,7 @@ export const orderService = {
         return createdOrder;
       } catch (err: any) {
         lastError = err;
-        console.warn(`[Order Transaction Attempt ${attempt} failed]:`, err?.code || err?.message);
+        console.warn(`[Order Transaction Attempt ${attempt} failed]:`, err?.code || err?.message, err);
 
         // Jika gagal karena benturan, coba ulang otomatis sampai 5 kali dengan jeda acak 200 sampai 800 ms
         if (attempt < maxRetries) {
@@ -216,9 +229,12 @@ export const orderService = {
       }
     }
 
-    throw new Error(
+    const finalErr = new Error(
+      lastError?.message ||
       'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba lagi.'
     );
+    (finalErr as any).code = lastError?.code || (lastError?.message?.includes('permission') ? 'permission-denied' : undefined);
+    throw finalErr;
   },
 
   /**
@@ -437,11 +453,9 @@ export const orderService = {
     callback: (orders: Order[]) => void,
     onError?: (error: Error) => void
   ) {
-    const dateKey = getDateKeyJakarta(new Date());
     const q = query(
       collection(db, ORDERS_COL),
-      where('customerUid', '==', customerUid),
-      where('dateKey', '==', dateKey)
+      where('customerUid', '==', customerUid)
     );
 
     let hasReceivedServerData = false;

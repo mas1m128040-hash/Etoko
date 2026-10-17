@@ -31,6 +31,8 @@ import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import {
   cleanLocalOrderReferences,
   checkAndCleanStaleLocalOrders,
+  getActiveOrderForUser,
+  clearActiveOrderForUser,
 } from '../../lib/orderStorage';
 
 export const MenuPage: React.FC = () => {
@@ -59,8 +61,16 @@ export const MenuPage: React.FC = () => {
   const [itemQtyInput, setItemQtyInput] = useState(1);
   const [showTableModal, setShowTableModal] = useState(false);
 
-  // Customer orders hook: hanya menampilkan pesanan aktif untuk meja aktif pelanggan
-  const currentUid = auth.currentUser?.uid;
+  // Customer orders hook: hanya menampilkan pesanan aktif untuk pelanggan dengan UID ini
+  const [currentUid, setCurrentUid] = useState<string | undefined>(auth.currentUser?.uid);
+
+  useEffect(() => {
+    const unsub = authService.onAuthStateChanged((user) => {
+      setCurrentUid(user?.uid);
+    });
+    return () => unsub();
+  }, []);
+
   const {
     orders: customerOrders,
     rawOrders,
@@ -151,18 +161,16 @@ export const MenuPage: React.FC = () => {
   // Bersihkan referensi lokal pesanan aktif jika pesanan sudah SELESAI lebih dari 10 menit atau DIBATALKAN
   useEffect(() => {
     if (rawOrders && rawOrders.length > 0) {
-      checkAndCleanStaleLocalOrders(rawOrders);
+      checkAndCleanStaleLocalOrders(rawOrders, currentUid);
     }
-    const savedActiveOrderId =
-      localStorage.getItem('smart_resto_active_order_id') ||
-      sessionStorage.getItem('smart_resto_active_order_id');
+    const savedActiveOrderId = currentUid ? getActiveOrderForUser(currentUid) : null;
     if (savedActiveOrderId && customerOrders.length > 0) {
       const stillVisible = customerOrders.some((o) => o.id === savedActiveOrderId);
       if (!stillVisible) {
-        cleanLocalOrderReferences();
+        clearActiveOrderForUser(currentUid);
       }
     }
-  }, [customerOrders, rawOrders]);
+  }, [customerOrders, rawOrders, currentUid]);
 
   const handleOpenItemDetail = (menu: Menu) => {
     if (!menu.available) return;
@@ -257,7 +265,11 @@ export const MenuPage: React.FC = () => {
             {/* Chip "Pesanan Saya" jika ada pesanan (hanya tampil setelah data server terverifikasi) */}
             {!customerOrdersLoading && customerOrders.length > 0 && (
               <Link
-                to={`/order/${customerOrders[0].id}`}
+                to={`/order/${(() => {
+                  const savedId = currentUid ? getActiveOrderForUser(currentUid) : null;
+                  const matching = customerOrders.find((o) => o.id === savedId);
+                  return matching ? matching.id : customerOrders[0].id;
+                })()}`}
                 className="min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shrink-0"
               >
                 <Receipt className="w-4 h-4 shrink-0" />

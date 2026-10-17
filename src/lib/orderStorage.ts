@@ -4,17 +4,62 @@ import { Order } from '../types';
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 /**
- * Membersihkan semua referensi pesanan lokal dari localStorage dan sessionStorage
+ * Menghasilkan kunci penyimpanan lokal yang terikat spesifik ke UID pengguna
  */
-export const cleanLocalOrderReferences = () => {
+export const getUserOrderStorageKey = (uid: string) => `smart_resto_order_${uid}`;
+
+/**
+ * Simpan ID pesanan aktif terikat ke UID pengguna di localStorage & sessionStorage
+ */
+export const saveActiveOrderForUser = (uid: string, orderId: string) => {
+  if (!uid || !orderId) return;
   try {
+    const key = getUserOrderStorageKey(uid);
+    localStorage.setItem(key, orderId);
+    sessionStorage.setItem(key, orderId);
+  } catch (err) {
+    console.warn('[Storage] Gagal menyimpan pesanan untuk user:', err);
+  }
+};
+
+/**
+ * Ambil ID pesanan aktif milik UID pengguna dari sessionStorage / localStorage
+ */
+export const getActiveOrderForUser = (uid: string): string | null => {
+  if (!uid) return null;
+  try {
+    const key = getUserOrderStorageKey(uid);
+    return sessionStorage.getItem(key) || localStorage.getItem(key) || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Bersihkan pesanan aktif milik UID pengguna
+ */
+export const clearActiveOrderForUser = (uid?: string) => {
+  try {
+    if (uid) {
+      const key = getUserOrderStorageKey(uid);
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+    // Bersihkan juga referensi legacy tanpa UID
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_ORDER_ID);
     localStorage.removeItem('smart_resto_active_order_id');
     sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_ORDER_ID);
     sessionStorage.removeItem('smart_resto_active_order_id');
   } catch (err) {
-    console.warn('[Storage] Gagal membersihkan referensi pesanan lokal:', err);
+    console.warn('[Storage] Gagal membersihkan referensi pesanan user:', err);
   }
+};
+
+/**
+ * Membersihkan semua referensi pesanan lokal legacy
+ */
+export const cleanLocalOrderReferences = (uid?: string) => {
+  clearActiveOrderForUser(uid);
 };
 
 /**
@@ -22,24 +67,22 @@ export const cleanLocalOrderReferences = () => {
  * Bila pesanan tersebut sudah SELESAI lebih dari 10 menit atau DIBATALKAN,
  * bersihkan referensi pesanan dari penyimpanan lokal.
  */
-export const checkAndCleanStaleLocalOrders = (orders: Order[]) => {
+export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => {
   try {
-    const savedActiveOrderId =
-      localStorage.getItem(STORAGE_KEYS.ACTIVE_ORDER_ID) ||
-      localStorage.getItem('smart_resto_active_order_id') ||
-      sessionStorage.getItem(STORAGE_KEYS.ACTIVE_ORDER_ID) ||
-      sessionStorage.getItem('smart_resto_active_order_id');
+    const savedActiveOrderId = uid
+      ? getActiveOrderForUser(uid)
+      : localStorage.getItem('smart_resto_active_order_id') ||
+        sessionStorage.getItem('smart_resto_active_order_id');
 
     if (!savedActiveOrderId) return;
 
     const matchingOrder = orders.find((o) => o.id === savedActiveOrderId);
     if (!matchingOrder) {
-      // Jika pesanan tidak ada lagi di daftar pesanan aktif server
       return;
     }
 
     if (matchingOrder.status === 'DIBATALKAN') {
-      cleanLocalOrderReferences();
+      clearActiveOrderForUser(uid);
       return;
     }
 
@@ -55,7 +98,7 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[]) => {
         : null;
 
       if (!completedMs || Date.now() - completedMs > TEN_MINUTES_MS) {
-        cleanLocalOrderReferences();
+        clearActiveOrderForUser(uid);
       }
     }
   } catch (err) {
@@ -66,10 +109,10 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[]) => {
 /**
  * Validasi saat order dibuka di halaman status pesanan customer
  */
-export const handleSingleOrderStatusCleanup = (order: Order) => {
+export const handleSingleOrderStatusCleanup = (order: Order, uid?: string) => {
   try {
     if (order.status === 'DIBATALKAN') {
-      cleanLocalOrderReferences();
+      clearActiveOrderForUser(uid || order.customerUid);
       return;
     }
 
@@ -85,7 +128,7 @@ export const handleSingleOrderStatusCleanup = (order: Order) => {
         : null;
 
       if (completedMs && Date.now() - completedMs > TEN_MINUTES_MS) {
-        cleanLocalOrderReferences();
+        clearActiveOrderForUser(uid || order.customerUid);
       }
     }
   } catch (err) {

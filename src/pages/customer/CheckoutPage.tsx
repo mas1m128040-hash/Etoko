@@ -39,6 +39,7 @@ import { Card } from '../../components/ui/Card';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import { audioEngine } from '../../lib/audioEngine';
 import { useNow } from '../../hooks/useNow';
+import { saveActiveOrderForUser } from '../../lib/orderStorage';
 
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
@@ -58,7 +59,8 @@ export const CheckoutPage: React.FC = () => {
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<{ message: string; code?: string } | null>(null);
+  const currentAttemptOrderIdRef = useRef<string | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
   const [existingUnpaidOrder, setExistingUnpaidOrder] = useState<Order | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(true);
@@ -630,34 +632,34 @@ export const CheckoutPage: React.FC = () => {
 
   const handleSendOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    setErrorDetails(null);
 
     if (!customerName.trim()) {
-      setErrorMessage('Nama pemesan wajib diisi.');
+      setErrorDetails({ message: 'Nama pemesan wajib diisi.' });
       return;
     }
     if (!tableNumber.trim()) {
-      setErrorMessage('Nomor meja wajib dipilih.');
+      setErrorDetails({ message: 'Nomor meja wajib dipilih.' });
       return;
     }
     if (cooldownRemaining > 0) {
-      setErrorMessage(
-        `Mohon tunggu ${cooldownRemaining} detik lagi sebelum mengirim pesanan berikutnya.`
-      );
+      setErrorDetails({
+        message: `Mohon tunggu ${cooldownRemaining} detik lagi sebelum mengirim pesanan berikutnya.`,
+      });
       return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Verify anonymous auth session
-      let currentUid = auth.currentUser?.uid;
-      if (!currentUid) {
-        const anonUser = await authService.signInCustomerAnon();
-        currentUid = anonUser.uid;
+      // 1. Pastikan autentikasi anonim siap dan dapatkan UID milik perangkat ini
+      let user = auth.currentUser;
+      if (!user) {
+        user = await authService.signInCustomerAnon();
       }
+      const currentUid = user.uid;
 
-      // 2. Double check existing unpaid orders
+      // 2. Cek pesanan aktif belum lunas
       const unpaidCheck = await orderService.checkActiveUnpaidOrder(currentUid);
       if (unpaidCheck) {
         setExistingUnpaidOrder(unpaidCheck);
@@ -666,7 +668,7 @@ export const CheckoutPage: React.FC = () => {
         );
       }
 
-      // 3. Verify item availability from server
+      // 3. Verifikasi ketersediaan menu dari server
       const currentMenus = await menuService.getMenus();
       const unavailableInCart = items.filter((cartItem) => {
         const found = currentMenus.find((m) => m.id === cartItem.menuId);
@@ -680,8 +682,11 @@ export const CheckoutPage: React.FC = () => {
         );
       }
 
-      // 4. Buat ID dokumen pesanan di klien SEBELUM transaksi dimulai (mencegah duplikasi saat retry)
-      const clientOrderId = doc(collection(db, 'orders')).id;
+      // 4. ID pesanan dibuat SEKALI per upaya checkout dan dipakai ulang saat percobaan ulang (retry)
+      if (!currentAttemptOrderIdRef.current) {
+        currentAttemptOrderIdRef.current = doc(collection(db, 'orders')).id;
+      }
+      const clientOrderId = currentAttemptOrderIdRef.current;
 
       const newOrder = await orderService.createOrder(
         {
@@ -696,20 +701,21 @@ export const CheckoutPage: React.FC = () => {
         clientOrderId
       );
 
-      // 5. Update cooldown dan kosongkan keranjang HANYA setelah transaksi berhasil dikomit
+      // 5. Sukses: reset attempt ID ref, perbarui cooldown, kosongkan keranjang, dan simpan dengan kunci UID
+      currentAttemptOrderIdRef.current = null;
       setLastOrderTime(Date.now());
       clearCart();
-      localStorage.setItem('smart_resto_active_order_id', newOrder.id);
-      sessionStorage.setItem('smart_resto_active_order_id', newOrder.id);
+      saveActiveOrderForUser(currentUid, newOrder.id);
 
       // 6. Tampilkan layar "Pesanan Terkirim"
       setSubmittedOrder(newOrder);
     } catch (err: any) {
       console.error('[Create Order Error]', err);
-      setErrorMessage(
-        err?.message ||
-          'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba lagi.'
-      );
+      const errCode = err?.code || (err?.message?.includes('permission') ? 'permission-denied' : undefined);
+      setErrorDetails({
+        message: err?.message || 'Terjadi kendala saat mengirim pesanan. Keranjang Anda tetap aman, silakan coba lagi.',
+        code: errCode,
+      });
     } finally {
       setLoading(false);
     }
@@ -742,13 +748,18 @@ export const CheckoutPage: React.FC = () => {
       </header>
 
       <main className="max-w-xl mx-auto p-4 space-y-4">
-        {errorMessage && (
+        {errorDetails && (
           <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 flex items-start gap-3 text-sm">
             <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
             <div className="flex-1 space-y-2">
               <div>
                 <p className="font-bold">Gagal Mengirim Pesanan</p>
-                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{errorMessage}</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{errorDetails.message}</p>
+                {errorDetails.code && (
+                  <p className="text-[11px] font-mono font-semibold text-red-500 dark:text-red-400 mt-1">
+                    Kode: {errorDetails.code}
+                  </p>
+                )}
               </div>
               <Button
                 type="button"

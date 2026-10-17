@@ -50,8 +50,9 @@ service cloud.firestore {
 
     // Koleksi orders
     match /orders/{orderId} {
-      // Customer boleh membaca dokumen pesanan miliknya sendiri; Admin boleh membaca semua
-      allow get, list: if isAuthenticated() && (isAdmin() || resource.data.customerUid == request.auth.uid);
+      // Customer boleh membaca dokumen pesanan miliknya sendiri (atau pengecekan get non-existent); Admin boleh membaca semua
+      allow get: if isAuthenticated() && (isAdmin() || resource == null || resource.data.customerUid == request.auth.uid);
+      allow list: if isAuthenticated() && (isAdmin() || resource.data.customerUid == request.auth.uid);
 
       // Customer anonim boleh membuat pesanan dengan validasi data dasar tanpa cek dokumen users
       allow create: if isAuthenticated() &&
