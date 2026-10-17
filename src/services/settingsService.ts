@@ -2,6 +2,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../config/constants';
+import { isForbiddenUrl, FORBIDDEN_URL_ERROR_MESSAGE } from '../lib/urlUtils';
 
 const SETTINGS_DOC = 'restaurant';
 const SETTINGS_COL = 'settings';
@@ -39,6 +40,9 @@ export const settingsService = {
   },
 
   async updateSettings(settings: Partial<Settings>): Promise<void> {
+    if (settings.appUrl && isForbiddenUrl(settings.appUrl)) {
+      throw new Error(FORBIDDEN_URL_ERROR_MESSAGE);
+    }
     const ref = doc(db, SETTINGS_COL, SETTINGS_DOC);
     await setDoc(ref, settings, { merge: true });
   },

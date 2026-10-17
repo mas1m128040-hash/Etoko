@@ -745,9 +745,22 @@ export const CheckoutPage: React.FC = () => {
         {errorMessage && (
           <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 flex items-start gap-3 text-sm">
             <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-bold">Gagal Mengirim Pesanan</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{errorMessage}</p>
+            <div className="flex-1 space-y-2">
+              <div>
+                <p className="font-bold">Gagal Mengirim Pesanan</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{errorMessage}</p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleSendOrder}
+                loading={loading}
+                disabled={loading}
+                className="font-bold text-xs"
+              >
+                Coba Lagi
+              </Button>
             </div>
           </div>
         )}
@@ -980,9 +993,10 @@ export const CheckoutPage: React.FC = () => {
                 size="xl"
                 fullWidth
                 loading={loading}
-                icon={<Send className="w-5 h-5" />}
+                disabled={loading}
+                icon={!loading && <Send className="w-5 h-5" />}
               >
-                Kirim Pesanan Sekarang
+                {loading ? 'Mengirim pesanan...' : 'Kirim Pesanan Sekarang'}
               </Button>
             )}
 

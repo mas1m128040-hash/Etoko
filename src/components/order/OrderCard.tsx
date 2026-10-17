@@ -417,7 +417,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                   }`}
                 >
                   <Clock className="w-3 h-3 shrink-0" />
-                  <span>Menunggu {minutesElapsed >= 1 ? `${minutesElapsed} menit` : '< 1 menit'}</span>
+                  <span>Menunggu {minutesElapsed} menit</span>
                 </span>
               )}
               <StatusBadge status={order.status} size="sm" className="shrink-0" />

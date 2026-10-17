@@ -19,32 +19,50 @@ export const NewOrderPopup: React.FC<NewOrderPopupProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirmAllModal, setShowConfirmAllModal] = useState(false);
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
+
+  // Bersihkan ID yang sudah tidak ada di listener Firestore
+  useEffect(() => {
+    setAcceptedIds((prev) => {
+      const orderIds = new Set(orders.map((o) => o.id));
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (orderIds.has(id)) next.add(id);
+      }
+      return next;
+    });
+  }, [orders]);
 
   // Pesanan tertua ditampilkan pertama (diurutkan berdasarkan createdAt naik)
-  const currentOrder = orders[0];
-  const totalCount = orders.length;
+  const activeOrders = orders.filter((o) => !acceptedIds.has(o.id));
+  const currentOrder = activeOrders[0];
+  const totalCount = activeOrders.length;
   const otherCount = totalCount - 1;
 
   useEffect(() => {
     setErrorMessage(null);
   }, [currentOrder?.id]);
 
-  if (orders.length === 0) return null;
+  if (activeOrders.length === 0 || !currentOrder) return null;
 
   const handleAccept = async () => {
+    const targetOrder = currentOrder;
     setLoading(true);
     setErrorMessage(null);
     try {
-      await onAcceptSingle(currentOrder.id);
+      await onAcceptSingle(targetOrder.id);
+      // Langsung tampilkan pesanan BARU berikutnya di antrean
+      setAcceptedIds((prev) => new Set(prev).add(targetOrder.id));
     } catch (err: any) {
       const msg = err?.message || 'Gagal menerima pesanan';
       setErrorMessage(msg);
       // Bila sudah diterima admin lain, tampilkan "Pesanan sudah diterima oleh [nama]"
-      // dan setelah 2 detik bersihkan error agar popup menampilkan antrean berikutnya
+      // dan setelah 1.8 detik lanjut ke pesanan berikutnya
       if (msg.includes('diterima oleh') || msg.includes('sudah diubah')) {
         setTimeout(() => {
+          setAcceptedIds((prev) => new Set(prev).add(targetOrder.id));
           setErrorMessage(null);
-        }, 2000);
+        }, 1800);
       }
     } finally {
       setLoading(false);
@@ -57,6 +75,7 @@ export const NewOrderPopup: React.FC<NewOrderPopupProps> = ({
     setErrorMessage(null);
     try {
       await onAcceptAll();
+      setAcceptedIds(new Set(orders.map((o) => o.id)));
     } catch (err: any) {
       setErrorMessage(err?.message || 'Gagal menerima semua pesanan');
     } finally {

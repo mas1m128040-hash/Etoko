@@ -132,7 +132,7 @@ export const orderService = {
     );
 
     let lastError: any = null;
-    const maxRetries = 3;
+    const maxRetries = 5;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -208,9 +208,9 @@ export const orderService = {
         lastError = err;
         console.warn(`[Order Transaction Attempt ${attempt} failed]:`, err?.code || err?.message);
 
-        // Jika gagal karena benturan, coba lagi otomatis hingga 3 kali dengan jeda acak (jitter)
+        // Jika gagal karena benturan, coba ulang otomatis sampai 5 kali dengan jeda acak 200 sampai 800 ms
         if (attempt < maxRetries) {
-          const jitterMs = Math.floor(Math.random() * (500 - 150 + 1)) + 150;
+          const jitterMs = Math.floor(Math.random() * (800 - 200 + 1)) + 200;
           await new Promise((resolve) => setTimeout(resolve, jitterMs));
         }
       }

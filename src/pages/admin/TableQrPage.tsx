@@ -11,6 +11,7 @@ import {
   Save,
   CheckCircle2,
   Settings as SettingsIcon,
+  Globe,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { settingsService } from '../../services/settingsService';
@@ -21,6 +22,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Card } from '../../components/ui/Card';
 import { useUiStore } from '../../store/uiStore';
+import { isForbiddenUrl, sanitizeBaseUrl, buildTableOrderUrl } from '../../lib/urlUtils';
 
 export const TableQrPage: React.FC = () => {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -54,19 +56,23 @@ export const TableQrPage: React.FC = () => {
 
   const totalTables = settings?.totalTables || tableCountInput || 20;
 
-  // Alamat URL aplikasi aktif: gunakan settings.appUrl jika diset, atau window.location
-  const currentOrigin =
-    typeof window !== 'undefined'
-      ? `${window.location.protocol}//${window.location.host}${window.location.pathname}`
-          .replace(/\/$/, '')
-          .replace(/#.*$/, '')
-      : '';
+  // 1. Ambil origin browser saat ini (window.location.origin)
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
-  const effectiveBaseUrl = (settings?.appUrl?.trim() || currentOrigin)
-    .replace(/\/$/, '')
-    .replace(/#.*$/, '');
+  // 2. Ambil settings.appUrl yang tersimpan di Firestore
+  const rawSavedUrl = (settings?.appUrl || '').trim();
+  const isSavedUrlForbidden = isForbiddenUrl(rawSavedUrl);
 
-  const isLocalOrDevUrl = /aistudio|localhost|127\.0\.0\.1|ai\.studio/i.test(effectiveBaseUrl);
+  // 3. Jika URL tersimpan termasuk daftar terlarang, abaikan nilainya dan gunakan window.location.origin
+  const effectiveBaseUrl = sanitizeBaseUrl(
+    !isSavedUrlForbidden && rawSavedUrl ? rawSavedUrl : currentOrigin
+  );
+
+  // 4. Periksa apakah URL tergolong terlarang (baik dari savedUrl maupun dari preview origin)
+  const isUrlInvalidOrForbidden = isSavedUrlForbidden || isForbiddenUrl(effectiveBaseUrl);
+
+  // 5. URL Lengkap Meja 1 untuk pengujian
+  const testTable1Url = buildTableOrderUrl(effectiveBaseUrl, 1);
 
   const tablesToRender =
     printSingleTable !== null
@@ -83,7 +89,7 @@ export const TableQrPage: React.FC = () => {
     const generateAllQrs = async () => {
       const generated: Record<number, string> = {};
       for (let i = 1; i <= totalTables; i++) {
-        const orderUrl = `${effectiveBaseUrl}/#/menu?table=${i}`;
+        const orderUrl = buildTableOrderUrl(effectiveBaseUrl, i);
         try {
           const dataUrl = await QRCode.toDataURL(orderUrl, {
             width: 400,
@@ -163,6 +169,10 @@ export const TableQrPage: React.FC = () => {
   };
 
   const handlePrintAll = () => {
+    if (isUrlInvalidOrForbidden) {
+      addToast('error', 'Alamat QR salah, perbaiki di Pengaturan');
+      return;
+    }
     setPrintSingleTable(null);
     setSelectedTable('ALL');
     setTimeout(() => {
@@ -171,6 +181,10 @@ export const TableQrPage: React.FC = () => {
   };
 
   const handlePrintSingle = (tableNum: number) => {
+    if (isUrlInvalidOrForbidden) {
+      addToast('error', 'Alamat QR salah, perbaiki di Pengaturan');
+      return;
+    }
     setPrintSingleTable(tableNum);
     setTimeout(() => {
       window.print();
@@ -180,6 +194,10 @@ export const TableQrPage: React.FC = () => {
 
   // Unduh kartu QR Meja sebagai berkas PNG beresolusi tinggi langsung dari browser
   const handleDownloadPng = (tableNum: number) => {
+    if (isUrlInvalidOrForbidden) {
+      addToast('error', 'Alamat QR salah, perbaiki di Pengaturan');
+      return;
+    }
     const dataUrl = qrDataUrls[tableNum];
     if (!dataUrl) return;
 
@@ -241,31 +259,71 @@ export const TableQrPage: React.FC = () => {
   return (
     <AppShell title="CETAK QR MEJA">
       <div className="space-y-6">
-        {/* Peringatan jika URL aplikasi masih domain dev / internal AI Studio */}
-        {isLocalOrDevUrl && (
-          <div className="print:hidden p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-200">
-                  Perhatian: Alamat URL Aplikasi Menggunakan Domain Pengembangan
+        {/* Banner Merah jika URL termasuk daftar terlarang */}
+        {isUrlInvalidOrForbidden && (
+          <div className="print:hidden p-4 sm:p-5 rounded-2xl bg-red-50 dark:bg-red-950/40 border-2 border-red-500 text-red-900 dark:text-red-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-red-500 text-white shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-red-700 dark:text-red-400">
+                  Alamat QR salah, perbaiki di Pengaturan
                 </h4>
-                <p className="text-xs text-amber-800/90 dark:text-amber-300 mt-0.5 leading-relaxed">
-                  URL saat ini (<code className="font-mono font-bold text-amber-950 dark:text-amber-100">{effectiveBaseUrl}</code>) mengandung <em>aistudio/localhost</em>. Kode QR yang dicetak dengan URL ini tidak dapat dibuka oleh pelanggan di HP mereka.
+                <p className="text-xs text-red-600 dark:text-red-300 leading-relaxed">
+                  Alamat aplikasi mengandung domain uji coba/internal (seperti <em>ais-dev / aistudio / localhost</em>). Pelanggan yang memindai QR ini di HP tidak akan bisa mengakses menu. Tombol Cetak dan Unduh dinonaktifkan sampai Anda memasukkan alamat domain publik resmi restoran di Pengaturan.
                 </p>
               </div>
             </div>
-            <Link to="/admin/settings" className="shrink-0">
+            <Link to="/admin/settings" className="shrink-0 w-full sm:w-auto">
               <Button
                 variant="primary"
-                size="sm"
+                size="md"
                 icon={<SettingsIcon className="w-4 h-4" />}
+                className="w-full sm:w-auto min-h-[44px] bg-red-600 hover:bg-red-700 text-white border-none shadow-md shadow-red-600/20"
               >
-                Atur URL Publik di Pengaturan
+                Perbaiki di Pengaturan
               </Button>
             </Link>
           </div>
         )}
+
+        {/* Panel Informasi URL QR Lengkap (tidak dipotong) & Tombol Uji QR */}
+        <div className="print:hidden p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#1a1a1a] border border-stone-200 dark:border-stone-800 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider block">
+                Format Alamat URL QR Meja
+              </span>
+              <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5">
+                Alamat web lengkap yang tertanam pada kode QR meja:
+              </p>
+            </div>
+
+            {/* Tombol Uji QR Meja 1 */}
+            <a
+              href={testTable1Url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#FF6B1A] text-white hover:bg-[#E5530A] shadow-sm shadow-orange-500/20 transition-all shrink-0 min-h-[40px] cursor-pointer"
+              title="Uji buka URL Meja 1 di tab baru"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Uji QR</span>
+            </a>
+          </div>
+
+          {/* URL Lengkap tanpa truncate/ellipsis */}
+          <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800">
+            <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold text-stone-500 dark:text-stone-400">
+              <Globe className="w-3.5 h-3.5 text-[#FF6B1A]" />
+              <span>URL Meja 1:</span>
+            </div>
+            <div className="font-mono text-xs text-stone-900 dark:text-stone-100 break-all select-all font-bold leading-relaxed">
+              {testTable1Url}
+            </div>
+          </div>
+        </div>
 
         {/* Toolbar Pengelolaan Jumlah Meja & Cetak (Sembunyi saat dicetak) */}
         <div className="print:hidden space-y-4">
@@ -354,9 +412,11 @@ export const TableQrPage: React.FC = () => {
               <Button
                 variant="primary"
                 size="md"
+                disabled={isUrlInvalidOrForbidden}
                 onClick={handlePrintAll}
                 icon={<Printer className="w-4 h-4" />}
-                className="min-h-[44px]"
+                className="min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
+                title={isUrlInvalidOrForbidden ? 'Alamat QR salah, perbaiki di Pengaturan' : 'Cetak Semua (6 Kartu per A4)'}
               >
                 Cetak Semua (6 Kartu per A4)
               </Button>
@@ -411,8 +471,8 @@ export const TableQrPage: React.FC = () => {
                 <p className="text-[11px] font-medium text-stone-500 mt-0.5">
                   Arahkan kamera HP ke QR Code di atas
                 </p>
-                <p className="text-[10px] font-mono text-stone-400 truncate max-w-[200px] mt-1">
-                  {effectiveBaseUrl}/#/menu?table={tableNum}
+                <p className="text-[10px] font-mono text-stone-400 break-all max-w-[240px] mt-1">
+                  {orderUrl}
                 </p>
 
                 {/* Aksi Per Meja (Sembunyi saat cetak) */}
@@ -421,8 +481,11 @@ export const TableQrPage: React.FC = () => {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={isUrlInvalidOrForbidden}
                     onClick={() => handlePrintSingle(tableNum)}
                     icon={<Printer className="w-3.5 h-3.5 text-[#FF6B1A]" />}
+                    className="disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={isUrlInvalidOrForbidden ? 'Alamat QR salah, perbaiki di Pengaturan' : undefined}
                   >
                     Cetak
                   </Button>
@@ -431,8 +494,11 @@ export const TableQrPage: React.FC = () => {
                     type="button"
                     variant="secondary"
                     size="sm"
+                    disabled={isUrlInvalidOrForbidden}
                     onClick={() => handleDownloadPng(tableNum)}
                     icon={<Download className="w-3.5 h-3.5 text-stone-600" />}
+                    className="disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={isUrlInvalidOrForbidden ? 'Alamat QR salah, perbaiki di Pengaturan' : undefined}
                   >
                     Unduh PNG
                   </Button>

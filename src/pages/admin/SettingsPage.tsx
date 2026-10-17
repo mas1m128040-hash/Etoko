@@ -33,6 +33,7 @@ import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/Fir
 import { Settings, AlarmTone, AlarmMode, Order } from '../../types';
 import { DEFAULT_SETTINGS, ALARM_TONE_LABELS, ALARM_MODE_LABELS } from '../../config/constants';
 import { formatRupiah, formatVoiceOrderText } from '../../lib/formatters';
+import { isForbiddenUrl, sanitizeBaseUrl, FORBIDDEN_URL_ERROR_MESSAGE } from '../../lib/urlUtils';
 
 export const SettingsPage: React.FC = () => {
   const { soundEnabled, setSoundEnabled, volume, setVolume, activateAudio } =
@@ -95,11 +96,9 @@ export const SettingsPage: React.FC = () => {
         seedService.isDatabaseSeeded().catch(() => true),
       ]);
       originalTotalTablesRef.current = s.totalTables || 20;
-      if (!s.appUrl && typeof window !== 'undefined') {
-        s.appUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`
-          .replace(/\/$/, '')
-          .replace(/#.*$/, '');
-      }
+      // Nilai URL TIDAK BOLEH tersimpan otomatis dari window.location.
+      // Biarkan kosong jika belum pernah diisi manual oleh admin.
+      s.appUrl = s.appUrl || '';
       setSettings(s);
       setIsSeeded(seeded);
     } catch (err: any) {
@@ -119,6 +118,15 @@ export const SettingsPage: React.FC = () => {
     if (settings.totalTables < 1 || settings.totalTables > 200) {
       addToast('error', 'Jumlah meja harus antara 1 sampai 200.');
       return;
+    }
+
+    // Validasi Alamat Aplikasi (URL): Tolak penyimpanan URL terlarang
+    if (settings.appUrl && settings.appUrl.trim()) {
+      const cleanUrl = sanitizeBaseUrl(settings.appUrl);
+      if (isForbiddenUrl(cleanUrl)) {
+        addToast('error', FORBIDDEN_URL_ERROR_MESSAGE);
+        return;
+      }
     }
 
     // Jika jumlah meja dikurangi dari sebelumnya, periksa pesanan aktif
@@ -146,7 +154,12 @@ export const SettingsPage: React.FC = () => {
   const executeSave = async () => {
     setSaving(true);
     try {
-      await settingsService.updateSettings(settings);
+      const sanitizedPayload = {
+        ...settings,
+        appUrl: settings.appUrl?.trim() ? sanitizeBaseUrl(settings.appUrl) : '',
+      };
+      await settingsService.updateSettings(sanitizedPayload);
+      setSettings(sanitizedPayload);
       originalTotalTablesRef.current = settings.totalTables;
       setShowReduceTableModal(false);
       setActiveOrdersOnRemovedTables([]);
@@ -379,9 +392,11 @@ export const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const current = `${window.location.protocol}//${window.location.host}${window.location.pathname}`
-                        .replace(/\/$/, '')
-                        .replace(/#.*$/, '');
+                      const current = typeof window !== 'undefined' ? window.location.origin : '';
+                      if (isForbiddenUrl(current)) {
+                        addToast('error', FORBIDDEN_URL_ERROR_MESSAGE);
+                        return;
+                      }
                       setSettings({ ...settings, appUrl: current });
                       addToast('info', 'Alamat URL berhasil diisi dengan alamat saat ini.');
                     }}
@@ -402,21 +417,21 @@ export const SettingsPage: React.FC = () => {
                   />
                 </div>
 
-                {/* Peringatan jika domain dev / internal AI Studio */}
-                {settings.appUrl && /aistudio|localhost|127\.0\.0\.1|ai\.studio/i.test(settings.appUrl) ? (
-                  <div className="mt-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                {/* Peringatan jika domain terlarang */}
+                {settings.appUrl && isForbiddenUrl(settings.appUrl) ? (
+                  <div className="mt-2.5 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border-2 border-red-400 dark:border-red-700 text-red-900 dark:text-red-200 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                     <p className="leading-relaxed">
-                      <strong>Peringatan Lingkungan Dev:</strong> Alamat ini mengandung <em>aistudio / localhost / ai.studio</em>. Kode QR yang dicetak menggunakan alamat ini tidak akan bisa dibuka pelanggan di luar jaringan internal. Gantilah dengan domain produksi publik Anda (misal: <code>https://nama-resto.vercel.app</code>) sebelum mencetak stiker QR meja.
+                      <strong>Alamat Ditolak:</strong> {FORBIDDEN_URL_ERROR_MESSAGE}. Masukkan alamat domain publik resmi restoran Anda (contoh: <code>https://nama-resto.vercel.app</code>) atau kosongkan field ini agar menggunakan alamat web saat ini.
                     </p>
                   </div>
                 ) : (
                   <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1.5">
                     QR Meja akan mengarahkan pelanggan ke:{' '}
                     <code className="font-mono text-[#FF6B1A]">
-                      {settings.appUrl
-                        ? `${settings.appUrl.replace(/\/$/, '')}/#/menu?table=N`
-                        : '(belum diatur)'}
+                      {settings.appUrl?.trim()
+                        ? `${sanitizeBaseUrl(settings.appUrl)}/#/menu?table=N`
+                        : `${typeof window !== 'undefined' ? window.location.origin : ''}/#/menu?table=N (otomatis dari alamat saat ini)`}
                     </code>
                   </p>
                 )}
