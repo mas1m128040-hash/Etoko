@@ -21,6 +21,7 @@ import {
 } from '../types';
 import { getDateKeyJakarta, formatOrderCode } from '../lib/formatters';
 import { isValidStatusTransition } from '../lib/statusRules';
+import { getDeviceId } from '../lib/deviceId';
 
 const ORDERS_COL = 'orders';
 const COUNTERS_COL = 'counters';
@@ -29,6 +30,7 @@ export interface CreateOrderParams {
   customerName: string;
   tableNumber: string;
   customerUid: string;
+  deviceId?: string;
   paymentMethod: PaymentMethod;
   items: OrderItem[];
   notes?: string;
@@ -37,8 +39,10 @@ export interface CreateOrderParams {
 
 export const orderService = {
   /**
-   * Cek apakah customer memiliki pesanan aktif yang belum lunas dan belum dibatalkan
-   * Menggunakan query hanya berdasarkan customerUid, dan aman dari error jaringan
+   * Cek apakah customer memiliki pesanan aktif yang belum lunas dan belum dibatalkan.
+   * Tetap query where customerUid sama dengan uid, lalu saring di memori:
+   * hanya pesanan dengan deviceId SAMA dengan getDeviceId() yang dihitung untuk pemblokiran.
+   * Pesanan tanpa deviceId (data lama) TIDAK pernah memblokir.
    */
   async checkActiveUnpaidOrder(customerUid: string): Promise<Order | null> {
     if (!customerUid) return null;
@@ -48,10 +52,15 @@ export const orderService = {
         where('customerUid', '==', customerUid)
       );
       const snap = await getDocs(q);
+      const currentDeviceId = getDeviceId();
       const unpaid = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Order))
         .filter(
-          (o) => o.paymentStatus === 'BELUM_BAYAR' && o.status !== 'DIBATALKAN'
+          (o) =>
+            o.paymentStatus === 'BELUM_BAYAR' &&
+            o.status !== 'DIBATALKAN' &&
+            Boolean(o.deviceId) &&
+            o.deviceId === currentDeviceId
         );
 
       return unpaid.length > 0 ? unpaid[0] : null;
@@ -181,6 +190,7 @@ export const orderService = {
             }
           }
 
+          const currentDeviceId = params.deviceId || getDeviceId();
           const newOrderPayload: Omit<Order, 'id'> = {
             orderNumber: nextNumber,
             orderCode,
@@ -188,6 +198,7 @@ export const orderService = {
             customerName: params.customerName.trim().slice(0, 50),
             tableNumber: params.tableNumber.trim(),
             customerUid: params.customerUid,
+            deviceId: currentDeviceId,
             items: params.items.map((i) => ({
               menuId: i.menuId,
               name: i.name,

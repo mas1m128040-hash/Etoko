@@ -40,6 +40,7 @@ import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import { audioEngine } from '../../lib/audioEngine';
 import { useNow } from '../../hooks/useNow';
 import { saveActiveOrderForUser } from '../../lib/orderStorage';
+import { getDeviceId } from '../../lib/deviceId';
 
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
@@ -601,6 +602,28 @@ export const CheckoutPage: React.FC = () => {
 
   // If user has an existing unpaid active order, block checkout!
   if (existingUnpaidOrder) {
+    const blockingOrderTime = (() => {
+      if (!existingUnpaidOrder.createdAt) return '';
+      try {
+        const ms = existingUnpaidOrder.createdAt.toMillis
+          ? existingUnpaidOrder.createdAt.toMillis()
+          : existingUnpaidOrder.createdAt.seconds
+          ? existingUnpaidOrder.createdAt.seconds * 1000
+          : existingUnpaidOrder.createdAt instanceof Date
+          ? existingUnpaidOrder.createdAt.getTime()
+          : null;
+        if (!ms) return '';
+        return new Intl.DateTimeFormat('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'Asia/Jakarta',
+        }).format(new Date(ms));
+      } catch {
+        return '';
+      }
+    })();
+
     return (
       <div className="min-h-screen bg-stone-50 dark:bg-[#121212] flex flex-col items-center justify-center p-4 text-center">
         <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 flex items-center justify-center mb-4">
@@ -609,6 +632,20 @@ export const CheckoutPage: React.FC = () => {
         <h2 className="text-xl font-bold text-stone-900 dark:text-white">
           Selesaikan Pembayaran Pesanan #{existingUnpaidOrder.orderCode} Dulu
         </h2>
+
+        {/* Baris kecil berisi meja, nama pemesan, dan jam pesanan yang memblokir */}
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-700 dark:text-stone-300 mt-2 mb-1">
+          <span>Meja {existingUnpaidOrder.tableNumber}</span>
+          <span className="text-stone-300 dark:text-stone-600">•</span>
+          <span>{existingUnpaidOrder.customerName}</span>
+          {blockingOrderTime && (
+            <>
+              <span className="text-stone-300 dark:text-stone-600">•</span>
+              <span>{blockingOrderTime} WIB</span>
+            </>
+          )}
+        </div>
+
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mt-2 mb-6">
           Satu perangkat hanya dapat memiliki satu pesanan aktif yang belum lunas. Mohon selesaikan pembayaran pesanan sebelumnya sebelum membuat pesanan baru.
         </p>
@@ -693,6 +730,7 @@ export const CheckoutPage: React.FC = () => {
           customerName: customerName.trim(),
           tableNumber: tableNumber.trim(),
           customerUid: currentUid,
+          deviceId: getDeviceId(),
           paymentMethod,
           items,
           notes: orderNotes.trim(),

@@ -33,6 +33,7 @@ import { Button } from '../../components/ui/Button';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import { audioEngine } from '../../lib/audioEngine';
 import { handleSingleOrderStatusCleanup, clearActiveOrderForUser } from '../../lib/orderStorage';
+import { getDeviceId } from '../../lib/deviceId';
 
 export const OrderStatusPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -103,6 +104,17 @@ export const OrderStatusPage: React.FC = () => {
             clearActiveOrderForUser(activeUid);
             setOrder(null);
             setError('Anda tidak memiliki akses ke pesanan ini.');
+            setLoading(false);
+            return;
+          }
+
+          // Verifikasi deviceId: jika dokumen punya deviceId yang berbeda, perlakukan sebagai bukan milik perangkat ini
+          const currentDeviceId = getDeviceId();
+          if (fetchedOrder.deviceId && fetchedOrder.deviceId !== currentDeviceId) {
+            console.warn('[OrderStatusPage] Pesanan ini dibuat dari perangkat lain. Membersihkan referensi lokal.');
+            clearActiveOrderForUser(activeUid);
+            setOrder(null);
+            setError('Pesanan ini dibuat dari perangkat lain.');
             setLoading(false);
             return;
           }
@@ -326,6 +338,28 @@ export const OrderStatusPage: React.FC = () => {
         </h2>
         <p className="text-xs text-stone-500 max-w-xs mt-1 mb-6">
           Pesanan ini bukan milik akun atau perangkat Anda.
+        </p>
+        <Button variant="primary" onClick={() => navigate(backToMenuUrl)}>
+          Kembali ke Daftar Menu
+        </Button>
+      </div>
+    );
+  }
+
+  // Verifikasi deviceId: jika dokumen punya deviceId yang berbeda, perlakukan sebagai bukan milik perangkat ini
+  const currentDeviceId = getDeviceId();
+  if (order.deviceId && order.deviceId !== currentDeviceId) {
+    clearActiveOrderForUser(activeUid);
+    return (
+      <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+          Akses Ditolak
+        </h2>
+        <p className="text-xs text-stone-500 max-w-xs mt-1 mb-6">
+          Pesanan ini dibuat dari perangkat lain.
         </p>
         <Button variant="primary" onClick={() => navigate(backToMenuUrl)}>
           Kembali ke Daftar Menu

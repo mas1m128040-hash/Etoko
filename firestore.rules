@@ -73,7 +73,12 @@ service cloud.firestore {
         request.resource.data.totalPrice > 0 &&
         request.resource.data.payableAmount is number &&
         request.resource.data.payableAmount >= request.resource.data.totalPrice &&
-        request.resource.data.payableAmount <= request.resource.data.totalPrice + 99;
+        request.resource.data.payableAmount <= request.resource.data.totalPrice + 99 &&
+        (!('deviceId' in request.resource.data) || (
+          request.resource.data.deviceId is string &&
+          request.resource.data.deviceId.size() >= 8 &&
+          request.resource.data.deviceId.size() <= 64
+        ));
 
       // Update order:
       // 1. Admin aktif boleh mengubah status & detail pembayaran. Jika status SELESAI, pembayaran harus LUNAS.

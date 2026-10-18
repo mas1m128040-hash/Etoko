@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from '../config/constants';
 import { Order } from '../types';
+import { getDeviceId } from './deviceId';
 
 /**
  * Menghasilkan kunci penyimpanan lokal yang terikat spesifik ke UID pengguna
@@ -9,7 +10,7 @@ export const getUserOrderStorageKey = (uid: string) => `smart_resto_order_${uid}
 /**
  * Simpan ID pesanan aktif terikat ke UID pengguna di localStorage & sessionStorage
  */
-export const saveActiveOrderForUser = (uid: string, orderId: string) => {
+export const saveActiveOrderForUser = (uid: string | null | undefined, orderId: string) => {
   if (!uid || !orderId) return;
   try {
     const key = getUserOrderStorageKey(uid);
@@ -23,7 +24,7 @@ export const saveActiveOrderForUser = (uid: string, orderId: string) => {
 /**
  * Ambil ID pesanan aktif milik UID pengguna dari sessionStorage / localStorage
  */
-export const getActiveOrderForUser = (uid: string): string | null => {
+export const getActiveOrderForUser = (uid: string | null | undefined): string | null => {
   if (!uid) return null;
   try {
     const key = getUserOrderStorageKey(uid);
@@ -36,7 +37,7 @@ export const getActiveOrderForUser = (uid: string): string | null => {
 /**
  * Bersihkan pesanan aktif milik UID pengguna
  */
-export const clearActiveOrderForUser = (uid?: string) => {
+export const clearActiveOrderForUser = (uid?: string | null) => {
   try {
     if (uid) {
       const key = getUserOrderStorageKey(uid);
@@ -56,16 +57,16 @@ export const clearActiveOrderForUser = (uid?: string) => {
 /**
  * Membersihkan semua referensi pesanan lokal legacy
  */
-export const cleanLocalOrderReferences = (uid?: string) => {
+export const cleanLocalOrderReferences = (uid?: string | null) => {
   clearActiveOrderForUser(uid);
 };
 
 /**
  * Memeriksa status pesanan yang tersimpan di lokal (localStorage / sessionStorage).
- * Bila pesanan tersebut sudah SELESAI atau DIBATALKAN,
- * langsung bersihkan referensi pesanan dari penyimpanan lokal seketika tanpa masa tunggu.
+ * - Bila pesanan memiliki deviceId yang berbeda dari perangkat ini, bersihkan referensi lokalnya.
+ * - Bila pesanan tersebut sudah SELESAI atau DIBATALKAN, bersihkan referensi lokalnya seketika.
  */
-export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => {
+export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string | null) => {
   try {
     const savedActiveOrderId = uid
       ? getActiveOrderForUser(uid)
@@ -76,6 +77,13 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => 
 
     const matchingOrder = orders.find((o) => o.id === savedActiveOrderId);
     if (!matchingOrder) {
+      return;
+    }
+
+    const currentDeviceId = getDeviceId();
+    // Jika dokumen punya deviceId yang berbeda, perlakukan sebagai bukan milik perangkat ini
+    if (matchingOrder.deviceId && matchingOrder.deviceId !== currentDeviceId) {
+      clearActiveOrderForUser(uid);
       return;
     }
 
@@ -90,10 +98,18 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => 
 
 /**
  * Validasi dan pembersihan langsung saat order diproses di halaman status pesanan customer
- * Begitu pesanan berubah menjadi SELESAI atau DIBATALKAN, segera hapus dari storage lokal.
+ * - Jika dokumen punya deviceId berbeda, bersihkan referensi lokalnya.
+ * - Begitu pesanan berubah menjadi SELESAI atau DIBATALKAN, segera hapus dari storage lokal.
  */
-export const handleSingleOrderStatusCleanup = (order: Order, uid?: string) => {
+export const handleSingleOrderStatusCleanup = (order: Order, uid?: string | null) => {
   try {
+    const currentDeviceId = getDeviceId();
+    // Jika dokumen punya deviceId yang berbeda, perlakukan sebagai bukan milik perangkat ini
+    if (order.deviceId && order.deviceId !== currentDeviceId) {
+      clearActiveOrderForUser(uid || order.customerUid);
+      return;
+    }
+
     if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
       clearActiveOrderForUser(uid || order.customerUid);
     }
@@ -101,4 +117,5 @@ export const handleSingleOrderStatusCleanup = (order: Order, uid?: string) => {
     console.warn('[Storage] Error single order cleanup:', err);
   }
 };
+
 

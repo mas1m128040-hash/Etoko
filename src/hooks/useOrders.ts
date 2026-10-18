@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Order } from '../types';
 import { orderService } from '../services/orderService';
 import { getDateKeyJakarta } from '../lib/formatters';
+import { getDeviceId } from '../lib/deviceId';
 
 export function useTodayOrders(customDateKey?: string) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -190,7 +191,13 @@ export function useCustomerOrders(
       // 1. Validasi customerUid
       if (order.customerUid !== customerUid) return false;
 
-      // 2. Validasi nomor meja aktif jika nomor meja ditentukan
+      // 2. Validasi deviceId: hanya pesanan yang deviceId-nya sama dengan getDeviceId() yang ditampilkan
+      const currentDeviceId = getDeviceId();
+      if (order.deviceId && order.deviceId !== currentDeviceId) {
+        return false;
+      }
+
+      // 3. Validasi nomor meja aktif jika nomor meja ditentukan
       if (
         activeTableNumber &&
         String(order.tableNumber).trim() !== String(activeTableNumber).trim()
@@ -198,12 +205,12 @@ export function useCustomerOrders(
         return false;
       }
 
-      // 3. Pesanan SELESAI atau DIBATALKAN langsung keluar dari daftar aktif
+      // 4. Pesanan SELESAI atau DIBATALKAN langsung keluar dari daftar aktif
       if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
         return false;
       }
 
-      // 4. Pesanan masih aktif (status BARU atau DITERIMA, atau paymentStatus BELUM_BAYAR)
+      // 5. Pesanan masih aktif (status BARU atau DITERIMA, atau paymentStatus BELUM_BAYAR)
       const isOngoing =
         order.status === 'BARU' ||
         order.status === 'DITERIMA' ||

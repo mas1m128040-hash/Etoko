@@ -58,6 +58,7 @@ export interface Order {
   customerName: string;
   tableNumber: string;
   customerUid: string; // UID pelanggan anonim pembuat
+  deviceId?: string; // ID perangkat browser pembuat pesanan
   items: OrderItem[];
   totalPrice: number;
   notes?: string;
