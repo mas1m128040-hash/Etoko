@@ -163,7 +163,8 @@ export function formatVoiceOrderText(
     items?: Array<{ qty: number }>;
   }
 ): string {
-  const tmpl = template || 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
+  const tmpl =
+    template || 'Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima.';
 
   // Format order number as regular integer (e.g. "003" -> "3" to read as "nomor tiga")
   const rawNum = order.orderCode ? order.orderCode.replace(/\D/g, '') : '';

@@ -20,7 +20,10 @@ import {
   Smartphone,
   Download,
   Share,
+  AlertOctagon,
+  Trash2,
 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { settingsService } from '../../services/settingsService';
 import { orderService } from '../../services/orderService';
@@ -33,6 +36,7 @@ import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { DataResetModal } from '../../components/admin/DataResetModal';
 import { FirebaseNoticeCard as FirebaseErrorCard } from '../../components/ui/FirebaseNoticeCard';
 import { Settings, AlarmTone, AlarmMode, Order } from '../../types';
 import { DEFAULT_SETTINGS, ALARM_TONE_LABELS, ALARM_MODE_LABELS } from '../../config/constants';
@@ -40,6 +44,10 @@ import { formatRupiah, formatVoiceOrderText } from '../../lib/formatters';
 import { isForbiddenUrl, sanitizeBaseUrl, FORBIDDEN_URL_ERROR_MESSAGE } from '../../lib/urlUtils';
 
 export const SettingsPage: React.FC = () => {
+  const { profile, user } = useAuth();
+  const isAdmin = profile?.role === 'ADMIN';
+  const adminIdentifier = profile?.name || profile?.email || user?.email || 'Admin';
+
   const { soundEnabled, setSoundEnabled, volume, setVolume, activateAudio } =
     useSoundStore();
   const { addToast } = useUiStore();
@@ -54,6 +62,7 @@ export const SettingsPage: React.FC = () => {
   const [testingReadyVoice, setTestingReadyVoice] = useState(false);
   const [isSeeded, setIsSeeded] = useState<boolean>(true); // default true (sembunyikan bila koleksi menus berisi data)
   const [showSeedModal, setShowSeedModal] = useState<boolean>(false);
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
   // Hook PWA instalasi aplikasi ke desktop/HP
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -97,7 +106,7 @@ export const SettingsPage: React.FC = () => {
 
   const samplePreviewText = useMemo(() => {
     return formatVoiceOrderText(
-      settings.alarmVoiceText || 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.',
+      settings.alarmVoiceText || 'Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima.',
       sampleOrder
     );
   }, [settings.alarmVoiceText, sampleOrder]);
@@ -130,6 +139,9 @@ export const SettingsPage: React.FC = () => {
       // Nilai URL TIDAK BOLEH tersimpan otomatis dari window.location.
       // Biarkan kosong jika belum pernah diisi manual oleh admin.
       s.appUrl = s.appUrl || '';
+      if (typeof s.voiceRate === 'number') {
+        audioEngine.setVoiceRate(s.voiceRate);
+      }
       setSettings(s);
       setIsSeeded(seeded);
     } catch (err: any) {
@@ -228,9 +240,12 @@ export const SettingsPage: React.FC = () => {
     await activateAudio();
     setTestingVoice(true);
     try {
+      if (typeof settings.voiceRate === 'number') {
+        audioEngine.setVoiceRate(settings.voiceRate);
+      }
       const template =
         settings.alarmVoiceText ||
-        'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
+        'Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima.';
       const spokenText = formatVoiceOrderText(template, sampleOrder);
 
       await audioEngine.speakText(spokenText, volume);
@@ -260,6 +275,9 @@ export const SettingsPage: React.FC = () => {
     await activateAudio();
     setTestingPaymentVoice(true);
     try {
+      if (typeof settings.voiceRate === 'number') {
+        audioEngine.setVoiceRate(settings.voiceRate);
+      }
       const template =
         settings.paymentVoiceText ||
         'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.';
@@ -295,6 +313,9 @@ export const SettingsPage: React.FC = () => {
     await activateAudio();
     setTestingReadyVoice(true);
     try {
+      if (typeof settings.voiceRate === 'number') {
+        audioEngine.setVoiceRate(settings.voiceRate);
+      }
       const template =
         settings.readyVoiceText ||
         'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.';
@@ -904,9 +925,48 @@ export const SettingsPage: React.FC = () => {
                   onChange={(e) =>
                     setSettings({ ...settings, alarmVoiceText: e.target.value })
                   }
-                  placeholder="Pesanan baru nomor {nomor} dari meja {meja} atas nama {nama}, {jumlah} item, total {total}. Segera cek dan terima."
+                  placeholder="Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima."
                   className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
                 />
+
+                {/* Slider Kecepatan Suara */}
+                <div className="p-3 bg-stone-100 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="font-bold text-stone-800 dark:text-stone-200 flex items-center gap-2">
+                      <span>Kecepatan Suara</span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#FF6B1A]/10 text-[#FF6B1A] font-mono font-bold text-[11px]">
+                        {(settings.voiceRate ?? 1.2).toFixed(2)}x
+                      </span>
+                    </label>
+                    <span className="text-[11px] font-medium text-stone-500">
+                      {(settings.voiceRate ?? 1.2) < 1.0
+                        ? 'Lambat'
+                        : (settings.voiceRate ?? 1.2) > 1.3
+                        ? 'Cepat'
+                        : 'Normal'}
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0.8"
+                    max="1.6"
+                    step="0.05"
+                    value={settings.voiceRate ?? 1.2}
+                    onChange={(e) => {
+                      const rate = parseFloat(e.target.value);
+                      setSettings((prev) => ({ ...prev, voiceRate: rate }));
+                      audioEngine.setVoiceRate(rate);
+                    }}
+                    className="w-full h-1.5 bg-stone-200 dark:bg-stone-700 rounded-lg appearance-none cursor-pointer accent-[#FF6B1A]"
+                  />
+
+                  <div className="flex justify-between text-[10px] text-stone-400 font-medium">
+                    <span>Lambat (0.8x)</span>
+                    <span className="text-stone-500 font-bold">Normal (1.0x - 1.2x)</span>
+                    <span>Cepat (1.6x)</span>
+                  </div>
+                </div>
 
                 {/* Pratinjau Kalimat Hasil Akhir Memakai Data Contoh */}
                 <div className="p-3 bg-stone-100 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 text-xs space-y-1">
@@ -1189,6 +1249,63 @@ export const SettingsPage: React.FC = () => {
             </Button>
           </Card>
         )}
+
+        {/* Zona Berbahaya: Hapus Data Uji Coba (Hanya untuk Admin) */}
+        {isAdmin && (
+          <Card className="p-5 sm:p-6 space-y-4 border border-red-200 dark:border-red-900/60 bg-linear-to-br from-white to-red-50/40 dark:from-[#1a1a1a] dark:to-red-950/20">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-red-100 dark:border-red-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <AlertOctagon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-red-900 dark:text-red-200">
+                    Zona Berbahaya
+                  </h3>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    Pembersihan data transaksi untuk persiapan peluncuran atau reset uji coba.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                Fitur ini membersihkan riwayat pesanan pelanggan, rekap laporan harian, log pembayaran, dan mereset nomor urut antrean ke #001.{' '}
+                <span className="font-semibold text-stone-800 dark:text-stone-200">
+                  Data menu hidangan, kategori, pengaturan restoran, dan akun admin tetap aman dan tidak akan pernah terhapus.
+                </span>
+              </p>
+
+              {settings.lastResetAt && (
+                <div className="p-3 bg-red-50/60 dark:bg-red-950/30 rounded-xl border border-red-200/60 dark:border-red-900/40 text-[11px] text-red-900 dark:text-red-300 flex items-center justify-between">
+                  <span>
+                    Terakhir dibersihkan oleh: <strong>{settings.lastResetBy || 'Admin'}</strong>
+                  </span>
+                  {settings.lastResetCounts && (
+                    <span className="font-mono font-bold">
+                      {settings.lastResetCounts.total} dokumen terhapus
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <span className="text-[11px] text-stone-400">
+                  Hanya dapat diakses oleh akun dengan peran Administrator.
+                </span>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => setShowResetModal(true)}
+                  icon={<Trash2 className="w-4 h-4" />}
+                >
+                  Hapus Data Uji Coba...
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Seed Confirmation Modal */}
@@ -1289,6 +1406,16 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Modal Hapus Data Uji Coba */}
+      <DataResetModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        adminNameOrEmail={adminIdentifier}
+        onSuccess={() => {
+          loadSettings();
+        }}
+      />
     </AppShell>
   );
 };

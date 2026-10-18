@@ -70,10 +70,13 @@ function syncAudioAndTitle(
   // Hanya berbunyi berulang jika ADA pesanan berstatus BARU
   if (hasNewOrders && soundEnabled && !isMuted && isAudioContextActive) {
     audioEngine.setVolume(volume);
+    if (typeof settings.voiceRate === 'number') {
+      audioEngine.setVoiceRate(settings.voiceRate);
+    }
 
     const template =
       settings.alarmVoiceText ||
-      'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
+      'Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima.';
 
     const formattedVoiceText = buildAlarmVoiceText(orders, template);
 

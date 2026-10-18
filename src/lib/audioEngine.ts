@@ -24,6 +24,7 @@ class AudioEngine {
   private loopTimeoutId: number | null = null;
   private isAlarmRunning = false;
   private currentVolume = 0.8; // default 80%
+  private currentVoiceRate = 1.2; // default 1.2 (0.8 - 1.6)
 
   private currentOptions: AlarmOptions | null = null;
   private currentOrderKey: string | null = null;
@@ -74,6 +75,16 @@ class AudioEngine {
 
   public getVolumePercent(): number {
     return Math.round(this.currentVolume * 100);
+  }
+
+  public setVoiceRate(rate: number) {
+    if (typeof rate === 'number' && !Number.isNaN(rate)) {
+      this.currentVoiceRate = Math.max(0.8, Math.min(1.6, rate));
+    }
+  }
+
+  public getVoiceRate(): number {
+    return this.currentVoiceRate;
   }
 
   /**
@@ -404,7 +415,7 @@ class AudioEngine {
 
         const vol = customVolume !== undefined ? customVolume / 100 : this.currentVolume;
         utterance.volume = Math.max(0.1, Math.min(1.0, vol));
-        utterance.rate = 1.05;
+        utterance.rate = this.currentVoiceRate;
         utterance.pitch = 1.0;
 
         let finished = false;
@@ -458,7 +469,7 @@ class AudioEngine {
         if (idVoice) u.voice = idVoice;
         const vol = customVolume !== undefined ? customVolume / 100 : this.currentVolume;
         u.volume = Math.max(0.1, Math.min(1, vol));
-        u.rate = 1.05;
+        u.rate = this.currentVoiceRate;
         u.pitch = 1;
         u.onend = done;
         u.onerror = done;
@@ -578,7 +589,7 @@ class AudioEngine {
       this.alarmSpeechActive = false;
     }
     if (!alive()) return;
-    this.scheduleNext(token, 1400);
+    this.scheduleNext(token, 900);
   }
 
   // Backward compatibility alias

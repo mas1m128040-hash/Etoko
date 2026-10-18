@@ -77,6 +77,8 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string | nu
 
     const matchingOrder = orders.find((o) => o.id === savedActiveOrderId);
     if (!matchingOrder) {
+      // Dokumen pesanan sudah tidak ada di database (misal data telah dibersihkan / dihapus)
+      clearActiveOrderForUser(uid);
       return;
     }
 

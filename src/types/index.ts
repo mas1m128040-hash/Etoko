@@ -114,8 +114,19 @@ export interface Settings {
   alarmTone: AlarmTone;
   alarmMode: AlarmMode;
   alarmVoiceText: string;
+  voiceRate?: number;
   paymentVoiceText?: string;
   readyVoiceText?: string;
+  // Riwayat Hapus Data Uji Coba
+  lastResetAt?: any;
+  lastResetBy?: string;
+  lastResetCounts?: {
+    orders: number;
+    dailyStats: number;
+    paymentLogs: number;
+    counters: number;
+    total: number;
+  };
 }
 
 export interface CartItem extends OrderItem {

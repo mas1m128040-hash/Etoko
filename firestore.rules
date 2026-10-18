@@ -40,12 +40,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Koleksi counters: Customer boleh membaca dan menulis hanya untuk increment lastNumber
+    // Koleksi counters: Customer boleh membaca dan menulis hanya untuk increment lastNumber; Admin boleh hapus
     match /counters/{dateKey} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() &&
+      allow create, update: if isAuthenticated() &&
         request.resource.data.lastNumber is number &&
         request.resource.data.lastNumber > 0;
+      allow delete: if isAdmin();
+    }
+
+    // Koleksi paymentLogs: Hanya Admin aktif
+    match /paymentLogs/{logId} {
+      allow read, write: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Koleksi orders
@@ -97,13 +104,14 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerClaimedPaid', 'updatedAt'])
       );
 
-      // Dilarang menghapus riwayat order
-      allow delete: if false;
+      // Admin aktif boleh menghapus order
+      allow delete: if isAdmin();
     }
 
     // Koleksi dailyStats: Rekapitulasi penjualan harian (Hanya Admin aktif)
     match /dailyStats/{dateKey} {
       allow read, write: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

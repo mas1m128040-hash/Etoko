@@ -20,7 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // Alarm & Sound defaults
   alarmTone: 'DEFAULT',
   alarmMode: 'NADA',
-  alarmVoiceText: 'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.',
+  alarmVoiceText: 'Pesanan baru dari meja {meja}, atas nama {nama}. Segera terima.',
+  voiceRate: 1.2,
   paymentVoiceText:
     'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek dana masuk.',
   readyVoiceText:

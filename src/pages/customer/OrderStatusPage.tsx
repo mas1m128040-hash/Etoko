@@ -56,6 +56,12 @@ export const OrderStatusPage: React.FC = () => {
   const [currentUid, setCurrentUid] = useState<string | null>(auth.currentUser?.uid || null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
+  const activeTableNumber =
+    localStorage.getItem('smart_resto_table_number') || '';
+  const backToMenuUrl = activeTableNumber
+    ? `/menu?table=${encodeURIComponent(activeTableNumber)}`
+    : '/menu';
+
   // 1. Ensure anonymous session and track active UID
   useEffect(() => {
     const unsub = authService.onAuthStateChanged((user) => {
@@ -126,7 +132,9 @@ export const OrderStatusPage: React.FC = () => {
         setOrder(fetchedOrder);
         setLoading(false);
         if (!fetchedOrder) {
-          setError('Pesanan tidak ditemukan.');
+          const activeUid = auth.currentUser?.uid || currentUid;
+          clearActiveOrderForUser(activeUid);
+          navigate(backToMenuUrl, { replace: true });
         }
       },
       (err) => {
@@ -255,12 +263,6 @@ export const OrderStatusPage: React.FC = () => {
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
-
-  const activeTableNumber =
-    localStorage.getItem('smart_resto_table_number') || '';
-  const backToMenuUrl = activeTableNumber
-    ? `/menu?table=${encodeURIComponent(activeTableNumber)}`
-    : '/menu';
 
   // 5. Hitung mundur otomatis kembali ke menu jika pesanan SELESAI atau DIBATALKAN
   useEffect(() => {
