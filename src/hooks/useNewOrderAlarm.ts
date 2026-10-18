@@ -28,6 +28,34 @@ function notifySubscribers() {
   stateListeners.forEach((fn) => fn());
 }
 
+const ORDINALS = ['Pertama', 'Kedua', 'Ketiga', 'Keempat', 'Kelima'];
+
+function spokenNumber(code: string): string | number {
+  const n = parseInt(code, 10);
+  return Number.isNaN(n) ? code : n;
+}
+
+function buildAlarmVoiceText(orders: Order[], template: string): string {
+  if (orders.length === 0) return template;
+  if (orders.length === 1) {
+    const o = orders[0];
+    return formatVoiceOrderText(template, {
+      orderCode: o.orderCode,
+      tableNumber: o.tableNumber,
+      customerName: o.customerName,
+      payableAmount: o.payableAmount,
+      totalPrice: o.totalPrice,
+      items: o.items,
+    });
+  }
+  const shown = orders.slice(0, 5);
+  const parts = shown.map(
+    (o, i) => `${ORDINALS[i]}, nomor ${spokenNumber(o.orderCode)}, meja ${o.tableNumber}, atas nama ${o.customerName}`
+  );
+  const rest = orders.length - shown.length;
+  return `Perhatian! Ada ${orders.length} pesanan baru masuk. ${parts.join('. ')}.${rest > 0 ? ` Dan ${rest} pesanan lainnya.` : ''} Segera cek dan terima.`;
+}
+
 function syncAudioAndTitle(
   orders: Order[],
   settings: Settings,
@@ -43,28 +71,18 @@ function syncAudioAndTitle(
   if (hasNewOrders && soundEnabled && !isMuted && isAudioContextActive) {
     audioEngine.setVolume(volume);
 
-    const oldest = orders[0];
     const template =
       settings.alarmVoiceText ||
       'Pesanan baru! Pesanan baru dari meja {meja}. Segera cek dan terima.';
 
-    const formattedVoiceText = oldest
-      ? formatVoiceOrderText(template, {
-          orderCode: oldest.orderCode,
-          tableNumber: oldest.tableNumber,
-          customerName: oldest.customerName,
-          payableAmount: oldest.payableAmount,
-          totalPrice: oldest.totalPrice,
-          items: oldest.items,
-        })
-      : template;
+    const formattedVoiceText = buildAlarmVoiceText(orders, template);
 
     audioEngine.startRepeatingAlarm({
       tone: settings.alarmTone || 'DEFAULT',
       mode: settings.alarmMode || 'NADA',
       voiceText: formattedVoiceText,
       volume,
-      orderKey: oldest?.id,
+      orderKey: orders.map((o) => o.id).join(','),
     });
   } else {
     audioEngine.stopRepeatingAlarm();

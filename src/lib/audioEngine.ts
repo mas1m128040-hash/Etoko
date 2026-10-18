@@ -474,7 +474,13 @@ class AudioEngine {
   // Pengumuman (klaim bayar, dll): diputar SEKALI, di sela putaran alarm bila alarm sedang berjalan
   public enqueueAnnouncement(a: Announcement) {
     this.announcements.push(a);
-    if (!this.isAlarmRunning) void this.flushAnnouncements();
+    if (this.isAlarmRunning) {
+      // MENYELA: hentikan ucapan alarm yang sedang berjalan, putar pengumuman segera,
+      // lalu alarm lanjut membaca daftar pesanan (runLoopCycle memanggil flushAnnouncements di awal)
+      this.restartCycleSoon(150);
+    } else {
+      void this.flushAnnouncements();
+    }
   }
 
   private flushAnnouncements(): Promise<void> {
@@ -517,7 +523,7 @@ class AudioEngine {
     void this.runLoopCycle(this.cycleToken);
   }
 
-  private restartCycleSoon() {
+  private restartCycleSoon(delayMs = 300) {
     this.cycleToken++;
     const token = this.cycleToken;
     if (this.loopTimeoutId !== null) {
@@ -531,7 +537,7 @@ class AudioEngine {
     this.loopTimeoutId = window.setTimeout(() => {
       this.loopTimeoutId = null;
       if (this.isAlarmRunning && token === this.cycleToken) void this.runLoopCycle(token);
-    }, 300);
+    }, delayMs);
   }
 
   private scheduleNext(token: number, ms: number) {
