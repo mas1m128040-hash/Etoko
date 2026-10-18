@@ -5,11 +5,32 @@
 
 import { AlarmTone } from '../types';
 
+export interface AlarmOptions {
+  tone: AlarmTone;
+  mode: 'NADA' | 'SUARA' | 'NADA_LALU_SUARA';
+  voiceText: string;
+  volume?: number;
+  orderKey?: string; // id pesanan BARU tertua yang sedang dibacakan
+}
+
+export interface Announcement {
+  kind: 'CLAIM' | 'PAID';
+  voiceText: string;
+  volume?: number;
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private loopTimeoutId: number | null = null;
   private isAlarmRunning = false;
   private currentVolume = 0.8; // default 80%
+
+  private currentOptions: AlarmOptions | null = null;
+  private currentOrderKey: string | null = null;
+  private cycleToken = 0;
+  private alarmSpeechActive = false;
+  private announcements: Announcement[] = [];
+  private flushPromise: Promise<void> | null = null;
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -412,55 +433,146 @@ class AudioEngine {
   // Looping Repeating Alarm Controller
   // ==========================================
 
-  public startRepeatingAlarm(options: {
-    tone: AlarmTone;
-    mode: 'NADA' | 'SUARA' | 'NADA_LALU_SUARA';
-    voiceText: string;
-    volume?: number;
-  }) {
-    if (this.isAlarmRunning) return;
+  private sleep(ms: number) {
+    return new Promise<void>((r) => setTimeout(r, ms));
+  }
+
+  // Bicara tanpa membatalkan antrean lain
+  private speakQueued(text: string, customVolume?: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.isSpeechSupported() || !text) { resolve(); return; }
+      let finished = false;
+      let timer: number | undefined;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        resolve();
+      };
+      try {
+        const synth = window.speechSynthesis;
+        if (synth.paused) synth.resume();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'id-ID';
+        const idVoice = this.getIndonesianVoice();
+        if (idVoice) u.voice = idVoice;
+        const vol = customVolume !== undefined ? customVolume / 100 : this.currentVolume;
+        u.volume = Math.max(0.1, Math.min(1, vol));
+        u.rate = 1.05;
+        u.pitch = 1;
+        u.onend = done;
+        u.onerror = done;
+        timer = window.setTimeout(done, 15000);
+        synth.speak(u);
+      } catch (err) {
+        console.warn('Speech synthesis error:', err);
+        done();
+      }
+    });
+  }
+
+  // Pengumuman (klaim bayar, dll): diputar SEKALI, di sela putaran alarm bila alarm sedang berjalan
+  public enqueueAnnouncement(a: Announcement) {
+    this.announcements.push(a);
+    if (!this.isAlarmRunning) void this.flushAnnouncements();
+  }
+
+  private flushAnnouncements(): Promise<void> {
+    if (this.flushPromise) return this.flushPromise;
+    this.flushPromise = (async () => {
+      while (this.announcements.length > 0) {
+        const a = this.announcements.shift()!;
+        const vol = a.volume !== undefined ? a.volume : this.currentVolume * 100;
+        let toneMs: number;
+        if (a.kind === 'PAID') {
+          this.playPaymentSuccessChime(vol);
+          toneMs = 700;
+        } else {
+          toneMs = this.playPaymentClaimTone(vol);
+        }
+        await this.sleep(toneMs + 120);
+        if (a.voiceText) await this.speakQueued(a.voiceText, vol);
+        await this.sleep(300);
+      }
+    })().finally(() => {
+      this.flushPromise = null;
+    });
+    return this.flushPromise;
+  }
+
+  public async playPaymentClaimNotification(options: { voiceText: string; volume?: number }): Promise<void> {
+    this.enqueueAnnouncement({ kind: 'CLAIM', ...options });
+  }
+
+  public startRepeatingAlarm(options: AlarmOptions) {
+    const keyChanged = this.isAlarmRunning && options.orderKey !== this.currentOrderKey;
+    this.currentOptions = options;               // selalu simpan opsi TERBARU
+    this.currentOrderKey = options.orderKey ?? null;
+    if (this.isAlarmRunning) {
+      if (keyChanged) this.restartCycleSoon();   // pesanan tertua berganti: pindah ke pesanan berikutnya
+      return;
+    }
     this.isAlarmRunning = true;
+    this.cycleToken++;
+    void this.runLoopCycle(this.cycleToken);
+  }
 
-    const runLoopCycle = async () => {
-      if (!this.isAlarmRunning) return;
+  private restartCycleSoon() {
+    this.cycleToken++;
+    const token = this.cycleToken;
+    if (this.loopTimeoutId !== null) {
+      clearTimeout(this.loopTimeoutId);
+      this.loopTimeoutId = null;
+    }
+    // Hanya hentikan ucapan ALARM, jangan memotong pengumuman klaim
+    if (this.alarmSpeechActive && this.isSpeechSupported()) {
+      try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+    }
+    this.loopTimeoutId = window.setTimeout(() => {
+      this.loopTimeoutId = null;
+      if (this.isAlarmRunning && token === this.cycleToken) void this.runLoopCycle(token);
+    }, 300);
+  }
 
-      const vol = options.volume !== undefined ? options.volume : this.currentVolume * 100;
-      const speechAvail = this.isSpeechSupported();
+  private scheduleNext(token: number, ms: number) {
+    this.loopTimeoutId = window.setTimeout(() => {
+      this.loopTimeoutId = null;
+      if (this.isAlarmRunning && token === this.cycleToken) void this.runLoopCycle(token);
+    }, ms);
+  }
 
-      // Fallback mode if speech not supported or no voices
-      let activeMode = options.mode;
-      if ((activeMode === 'SUARA' || activeMode === 'NADA_LALU_SUARA') && !speechAvail) {
-        activeMode = 'NADA';
+  private async runLoopCycle(token: number) {
+    const alive = () => this.isAlarmRunning && token === this.cycleToken;
+    if (!alive()) return;
+
+    await this.flushAnnouncements();            // pengumuman klaim didahulukan di sela putaran
+    if (!alive()) return;
+
+    const options = this.currentOptions;        // dibaca ulang SETIAP putaran
+    if (!options) return;
+    const vol = options.volume !== undefined ? options.volume : this.currentVolume * 100;
+    let mode = options.mode;
+    if ((mode === 'SUARA' || mode === 'NADA_LALU_SUARA') && !this.isSpeechSupported()) mode = 'NADA';
+
+    if (mode === 'NADA' || mode === 'NADA_LALU_SUARA') {
+      const d = this.playToneOnce(options.tone, vol);
+      if (mode === 'NADA') {
+        this.scheduleNext(token, d + 1400);
+        return;
       }
+      await this.sleep(d + 200);
+      if (!alive()) return;
+    }
 
-      if (activeMode === 'NADA') {
-        const toneDuration = this.playToneOnce(options.tone, vol);
-        // Jeda antar pengulangan maksimal 1,5 detik
-        this.loopTimeoutId = window.setTimeout(() => {
-          if (this.isAlarmRunning) runLoopCycle();
-        }, toneDuration + 1400);
-      } else if (activeMode === 'SUARA') {
-        await this.speakText(options.voiceText, vol);
-        if (this.isAlarmRunning) {
-          this.loopTimeoutId = window.setTimeout(() => {
-            if (this.isAlarmRunning) runLoopCycle();
-          }, 1400);
-        }
-      } else if (activeMode === 'NADA_LALU_SUARA') {
-        const toneDuration = this.playToneOnce(options.tone, vol);
-        await new Promise((r) => setTimeout(r, toneDuration + 200));
-        if (this.isAlarmRunning) {
-          await this.speakText(options.voiceText, vol);
-        }
-        if (this.isAlarmRunning) {
-          this.loopTimeoutId = window.setTimeout(() => {
-            if (this.isAlarmRunning) runLoopCycle();
-          }, 1400);
-        }
-      }
-    };
-
-    runLoopCycle();
+    const latest = this.currentOptions ?? options; // teks terkini tepat sebelum bicara
+    this.alarmSpeechActive = true;
+    try {
+      await this.speakQueued(latest.voiceText, vol);
+    } finally {
+      this.alarmSpeechActive = false;
+    }
+    if (!alive()) return;
+    this.scheduleNext(token, 1400);
   }
 
   // Backward compatibility alias
@@ -478,16 +590,15 @@ class AudioEngine {
 
   public stopRepeatingAlarm() {
     this.isAlarmRunning = false;
+    this.cycleToken++;
+    this.currentOptions = null;
+    this.currentOrderKey = null;
     if (this.loopTimeoutId !== null) {
       clearTimeout(this.loopTimeoutId);
       this.loopTimeoutId = null;
     }
-    if (this.isSpeechSupported()) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {
-        // ignore
-      }
+    if (this.alarmSpeechActive && this.isSpeechSupported()) {
+      try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
     }
   }
 
@@ -538,21 +649,6 @@ class AudioEngine {
     this.playBellHarmonic(ctx, 880.0, now + 0.14, 0.35, vol * 0.9);
     this.triggerVibrate([80, 40, 100]);
     return 450;
-  }
-
-  /**
-   * Mainkan nada klaim bayar + suara orang (Web Speech API) SEKALI
-   */
-  public async playPaymentClaimNotification(options: {
-    voiceText: string;
-    volume?: number;
-  }): Promise<void> {
-    const vol = options.volume !== undefined ? options.volume : this.currentVolume * 100;
-    const toneDuration = this.playPaymentClaimTone(vol);
-    await new Promise((resolve) => setTimeout(resolve, toneDuration + 120));
-    if (options.voiceText) {
-      await this.speakText(options.voiceText, vol);
-    }
   }
 }
 

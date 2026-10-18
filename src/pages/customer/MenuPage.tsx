@@ -158,19 +158,23 @@ export const MenuPage: React.FC = () => {
     }
   }, [searchParams, tableNumber, setTableNumber, clearCart]);
 
-  // Bersihkan referensi lokal pesanan aktif jika pesanan sudah SELESAI lebih dari 10 menit atau DIBATALKAN
+  // Bersihkan referensi lokal pesanan aktif jika pesanan sudah SELESAI atau DIBATALKAN
   useEffect(() => {
     if (rawOrders && rawOrders.length > 0) {
       checkAndCleanStaleLocalOrders(rawOrders, currentUid);
     }
     const savedActiveOrderId = currentUid ? getActiveOrderForUser(currentUid) : null;
-    if (savedActiveOrderId && customerOrders.length > 0) {
-      const stillVisible = customerOrders.some((o) => o.id === savedActiveOrderId);
-      if (!stillVisible) {
+    if (savedActiveOrderId) {
+      if (customerOrders.length > 0) {
+        const stillVisible = customerOrders.some((o) => o.id === savedActiveOrderId);
+        if (!stillVisible) {
+          clearActiveOrderForUser(currentUid);
+        }
+      } else if (!customerOrdersLoading) {
         clearActiveOrderForUser(currentUid);
       }
     }
-  }, [customerOrders, rawOrders, currentUid]);
+  }, [customerOrders, rawOrders, currentUid, customerOrdersLoading]);
 
   const handleOpenItemDetail = (menu: Menu) => {
     if (!menu.available) return;

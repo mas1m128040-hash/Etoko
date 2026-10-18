@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
+import { audioEngine } from '../../lib/audioEngine';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +18,11 @@ export const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Buka kunci AudioContext & Web Speech browser pada klik pengguna sebelum login
+    try {
+      void audioEngine.resume();
+    } catch {}
+
     setError(null);
     setSubmitting(true);
 

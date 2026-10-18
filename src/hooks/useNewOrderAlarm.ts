@@ -64,6 +64,7 @@ function syncAudioAndTitle(
       mode: settings.alarmMode || 'NADA',
       voiceText: formattedVoiceText,
       volume,
+      orderKey: oldest?.id,
     });
   } else {
     audioEngine.stopRepeatingAlarm();
@@ -76,9 +77,10 @@ function syncAudioAndTitle(
         let toggle = false;
         titleFlashTimer = window.setInterval(() => {
           toggle = !toggle;
+          const count = sharedNewOrders.length;
           document.title = toggle
-            ? `(${orders.length}) PESANAN BARU MASUK!`
-            : `🔔 RESTO NOTIFIKASI (${orders.length})`;
+            ? `(${count}) PESANAN BARU MASUK!`
+            : `🔔 RESTO NOTIFIKASI (${count})`;
         }, 1000);
       }
     } else {

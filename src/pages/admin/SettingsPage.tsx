@@ -17,7 +17,11 @@ import {
   Minus,
   FileText,
   Globe,
+  Smartphone,
+  Download,
+  Share,
 } from 'lucide-react';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { settingsService } from '../../services/settingsService';
 import { orderService } from '../../services/orderService';
 import { seedService } from '../../services/seedService';
@@ -47,8 +51,27 @@ export const SettingsPage: React.FC = () => {
   const [seeding, setSeeding] = useState(false);
   const [testingVoice, setTestingVoice] = useState(false);
   const [testingPaymentVoice, setTestingPaymentVoice] = useState(false);
+  const [testingReadyVoice, setTestingReadyVoice] = useState(false);
   const [isSeeded, setIsSeeded] = useState<boolean>(true); // default true (sembunyikan bila koleksi menus berisi data)
   const [showSeedModal, setShowSeedModal] = useState<boolean>(false);
+
+  // Hook PWA instalasi aplikasi ke desktop/HP
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const [installing, setInstalling] = useState(false);
+
+  const handleInstallPWA = async () => {
+    setInstalling(true);
+    try {
+      const ok = await install();
+      if (ok) {
+        addToast('success', 'Aplikasi berhasil dipasang ke perangkat Anda!');
+      }
+    } catch (err) {
+      console.warn('Install PWA error:', err);
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   // State untuk pengelolaan meja dan proteksi pesanan aktif saat mengurangi meja
   const originalTotalTablesRef = React.useRef<number>(20);
@@ -86,6 +109,14 @@ export const SettingsPage: React.FC = () => {
       sampleOrder
     );
   }, [settings.paymentVoiceText, sampleOrder]);
+
+  const readyVoicePreviewText = useMemo(() => {
+    return formatVoiceOrderText(
+      settings.readyVoiceText ||
+        'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.',
+      sampleOrder
+    );
+  }, [settings.readyVoiceText, sampleOrder]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -241,6 +272,42 @@ export const SettingsPage: React.FC = () => {
       addToast('info', 'Uji suara pembayaran selesai diputar.');
     } finally {
       setTestingPaymentVoice(false);
+    }
+  };
+
+  const handleInsertReadyTag = (tag: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      readyVoiceText: (prev.readyVoiceText || '') + tag,
+    }));
+  };
+
+  const handleApplyReadyFullTemplate = () => {
+    setSettings((prev) => ({
+      ...prev,
+      readyVoiceText:
+        'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.',
+    }));
+    addToast('info', 'Template suara pembayaran diterima berhasil dipasang.');
+  };
+
+  const handleTestReadyVoice = async () => {
+    await activateAudio();
+    setTestingReadyVoice(true);
+    try {
+      const template =
+        settings.readyVoiceText ||
+        'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.';
+      const spokenText = formatVoiceOrderText(template, sampleOrder);
+
+      audioEngine.enqueueAnnouncement({
+        kind: 'PAID',
+        voiceText: spokenText,
+        volume,
+      });
+      addToast('info', 'Uji suara pembayaran diterima selesai diputar.');
+    } finally {
+      setTestingReadyVoice(false);
     }
   };
 
@@ -955,6 +1022,85 @@ export const SettingsPage: React.FC = () => {
                   </Button>
                 </div>
               </div>
+
+              {/* Field 3: Pengumuman Suara Pembayaran Diterima (Tandai Lunas) */}
+              <div className="space-y-3 pt-4 border-t border-stone-200 dark:border-stone-800">
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
+                    Format Kalimat Suara Pembayaran Diterima (Tandai Lunas)
+                  </label>
+                  <p className="text-[11px] text-stone-400 leading-relaxed mb-2">
+                    Teks yang dibacakan satu kali saat pesanan ditandai lunas oleh kasir atau admin.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                  {[
+                    { tag: '{nomor}', label: 'No. Order' },
+                    { tag: '{meja}', label: 'Meja' },
+                    { tag: '{nama}', label: 'Nama' },
+                    { tag: '{total}', label: 'Total Rupiah' },
+                  ].map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => handleInsertReadyTag(item.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/40 text-[#FF6B1A] font-mono text-[11px] font-bold border border-orange-200 dark:border-orange-800 transition-colors"
+                      title={`Sisipkan tag ${item.tag}`}
+                    >
+                      + {item.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleApplyReadyFullTemplate}
+                    className="ml-auto px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-[11px] font-bold border border-stone-200 dark:border-stone-700 flex items-center gap-1 transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#FF6B1A]" />
+                    <span>Pakai Template Lengkap</span>
+                  </button>
+                </div>
+
+                <textarea
+                  rows={2}
+                  value={settings.readyVoiceText ?? ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, readyVoiceText: e.target.value })
+                  }
+                  placeholder="Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
+                />
+
+                {/* Pratinjau Kalimat Hasil Akhir Memakai Data Contoh */}
+                <div className="p-3 bg-stone-100 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-stone-500 dark:text-stone-400">
+                    <span>Pratinjau Hasil Pembacaan (Data Contoh):</span>
+                    <span className="text-[10px] text-stone-400">
+                      Meja 5 • No. 003 • Budi
+                    </span>
+                  </div>
+                  <p className="text-stone-800 dark:text-stone-200 italic font-medium leading-relaxed">
+                    "{readyVoicePreviewText}"
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
+                  <p className="text-[11px] text-stone-400">
+                    Diputar sekali bersama lonceng konfirmasi pembayaran saat pesanan ditandai lunas.
+                  </p>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    loading={testingReadyVoice}
+                    onClick={handleTestReadyVoice}
+                    icon={<Play className="w-3.5 h-3.5 text-[#FF6B1A]" />}
+                  >
+                    Tes Suara Pembayaran Diterima
+                  </Button>
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -971,6 +1117,52 @@ export const SettingsPage: React.FC = () => {
             </Button>
           </div>
         </form>
+
+        {/* Kartu Pasang Aplikasi (PWA) */}
+        {!isInstalled && (isInstallable || isIOS) && (
+          <Card className="p-5 sm:p-6 space-y-4 border border-stone-200 dark:border-stone-800 bg-linear-to-br from-white to-orange-50/30 dark:from-[#1a1a1a] dark:to-orange-950/20">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-stone-100 dark:border-stone-800">
+              <Smartphone className="w-5 h-5 text-[#FF6B1A]" />
+              <div>
+                <h3 className="text-base font-bold text-stone-900 dark:text-white">
+                  Pasang Aplikasi di Perangkat Ini (PWA)
+                </h3>
+                <p className="text-xs text-stone-500 dark:text-stone-400">
+                  Jalankan Smart Resto dalam mode layar penuh (standalone) seperti aplikasi asli dari layar utama Anda.
+                </p>
+              </div>
+            </div>
+
+            {isInstallable && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                  Klik tombol di samping untuk memasang Smart Resto langsung dari Chrome ke desktop atau smartphone Anda.
+                </p>
+                <Button
+                  type="button"
+                  variant="primary"
+                  loading={installing}
+                  onClick={handleInstallPWA}
+                  icon={<Download className="w-4 h-4" />}
+                >
+                  Pasang Aplikasi
+                </Button>
+              </div>
+            )}
+
+            {isIOS && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2.5 text-amber-900 dark:text-amber-200 text-xs">
+                <Share className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Petunjuk untuk iPhone / iPad (Safari):</span>
+                  <span>
+                    Ketuk tombol <strong>Bagikan</strong> (ikon kotak dengan panah ke atas) di bilah navigasi Safari, lalu pilih <strong>Tambah ke Layar Utama</strong>.
+                  </span>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Database Seeder Section: Disembunyikan bila koleksi menus sudah berisi data */}
         {!isSeeded && (

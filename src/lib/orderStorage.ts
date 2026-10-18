@@ -1,8 +1,6 @@
 import { STORAGE_KEYS } from '../config/constants';
 import { Order } from '../types';
 
-const TEN_MINUTES_MS = 10 * 60 * 1000;
-
 /**
  * Menghasilkan kunci penyimpanan lokal yang terikat spesifik ke UID pengguna
  */
@@ -64,8 +62,8 @@ export const cleanLocalOrderReferences = (uid?: string) => {
 
 /**
  * Memeriksa status pesanan yang tersimpan di lokal (localStorage / sessionStorage).
- * Bila pesanan tersebut sudah SELESAI lebih dari 10 menit atau DIBATALKAN,
- * bersihkan referensi pesanan dari penyimpanan lokal.
+ * Bila pesanan tersebut sudah SELESAI atau DIBATALKAN,
+ * langsung bersihkan referensi pesanan dari penyimpanan lokal seketika tanpa masa tunggu.
  */
 export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => {
   try {
@@ -81,57 +79,26 @@ export const checkAndCleanStaleLocalOrders = (orders: Order[], uid?: string) => 
       return;
     }
 
-    if (matchingOrder.status === 'DIBATALKAN') {
+    // Begitu pesanan SELESAI atau DIBATALKAN, langsung bersihkan tanpa jeda
+    if (matchingOrder.status === 'SELESAI' || matchingOrder.status === 'DIBATALKAN') {
       clearActiveOrderForUser(uid);
-      return;
-    }
-
-    if (matchingOrder.status === 'SELESAI') {
-      const completedMs = matchingOrder.completedAt?.toMillis
-        ? matchingOrder.completedAt.toMillis()
-        : matchingOrder.completedAt?.seconds
-        ? matchingOrder.completedAt.seconds * 1000
-        : matchingOrder.updatedAt?.toMillis
-        ? matchingOrder.updatedAt.toMillis()
-        : matchingOrder.updatedAt?.seconds
-        ? matchingOrder.updatedAt.seconds * 1000
-        : null;
-
-      if (!completedMs || Date.now() - completedMs > TEN_MINUTES_MS) {
-        clearActiveOrderForUser(uid);
-      }
     }
   } catch (err) {
-    console.warn('[Storage] Error memeriksa kadaluarsa pesanan lokal:', err);
+    console.warn('[Storage] Error memeriksa status pesanan lokal:', err);
   }
 };
 
 /**
- * Validasi saat order dibuka di halaman status pesanan customer
+ * Validasi dan pembersihan langsung saat order diproses di halaman status pesanan customer
+ * Begitu pesanan berubah menjadi SELESAI atau DIBATALKAN, segera hapus dari storage lokal.
  */
 export const handleSingleOrderStatusCleanup = (order: Order, uid?: string) => {
   try {
-    if (order.status === 'DIBATALKAN') {
+    if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
       clearActiveOrderForUser(uid || order.customerUid);
-      return;
-    }
-
-    if (order.status === 'SELESAI') {
-      const completedMs = order.completedAt?.toMillis
-        ? order.completedAt.toMillis()
-        : order.completedAt?.seconds
-        ? order.completedAt.seconds * 1000
-        : order.updatedAt?.toMillis
-        ? order.updatedAt.toMillis()
-        : order.updatedAt?.seconds
-        ? order.updatedAt.seconds * 1000
-        : null;
-
-      if (completedMs && Date.now() - completedMs > TEN_MINUTES_MS) {
-        clearActiveOrderForUser(uid || order.customerUid);
-      }
     }
   } catch (err) {
     console.warn('[Storage] Error single order cleanup:', err);
   }
 };
+

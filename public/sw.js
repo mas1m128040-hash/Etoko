@@ -1,14 +1,14 @@
 // Service Worker SMART RESTAURANT POS
-// Versi cache dinaikkan untuk memastikan pembersihan cache lama
-const CACHE_NAME = 'smart-resto-v2';
+const CACHE_NAME = 'smart-resto-v3';
 
-// PERHATIAN: JANGAN PERNAH memasukkan '/', '/index.html' ke dalam cache ini
+// PERHATIAN: JANGAN PERNAH menyimpan index.html atau request navigasi ke cache
 // agar browser selalu memuat index.html versi terbaru saat ada deploy baru di Vercel.
 const STATIC_ASSETS = [
+  '/manifest.webmanifest',
   '/manifest.json'
 ];
 
-// 1. Install Event: skipWaiting agar service worker baru langsung aktif tanpa menunggu tab ditutup
+// 1. Install Event: skipWaiting agar service worker langsung aktif tanpa menunggu tab ditutup
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -36,7 +36,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 3. Fetch Event: Navigasi dan index.html selalu diambil langsung dari jaringan (Network First / Only)
+// 3. Fetch Event: Navigasi dan index.html SELALU diteruskan ke jaringan (Network First / Pass-through)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Permintaan navigasi halaman HTML / SPA: SELALU AMBIL DARI JARINGAN (Network First)
+  // Permintaan navigasi halaman HTML / SPA: SELALU AMBIL LANGSUNG DARI JARINGAN
   // JANGAN PERNAH mengembalikan index.html basi dari cache lokal
   const isNavigation =
     event.request.mode === 'navigate' ||
@@ -65,7 +65,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request).catch((err) => {
         console.warn('[SW] Navigasi offline atau jaringan gagal:', err);
-        // Jika benar-benar offline dan jaringan gagal total
         return new Response('Koneksi internet terputus. Silakan periksa jaringan Anda dan muat ulang halaman.', {
           status: 503,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' }
@@ -75,7 +74,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Untuk berkas statis (seperti manifest.json)
+  // Untuk berkas statis manifest atau aset: ambil dari jaringan, fallback ke cache jika offline
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);

@@ -153,9 +153,9 @@ export function useSingleOrder(orderId: string | undefined) {
  * - Kueri Firestore HANYA berdasarkan customerUid
  * - Filter sisi customer:
  *   1. customerUid == pengguna
- *   2. tableNumber == meja aktif
- *   3. Pesanan masih aktif (BARU atau DITERIMA, atau BELUM_BAYAR bukan DIBATALKAN)
- *   4. Pesanan SELESAI atau DIBATALKAN hanya tampil selama 10 menit sejak completedAt/cancelledAt
+ *   2. tableNumber == meja aktif (jika ada)
+ *   3. Pesanan masih aktif (BARU atau DITERIMA, atau BELUM_BAYAR bukan DIBATALKAN dan bukan SELESAI)
+ *   4. Pesanan SELESAI atau DIBATALKAN langsung hilang seketika tanpa masa tunggu 10 menit
  */
 export function useCustomerOrders(
   customerUid: string | undefined,
@@ -163,15 +163,6 @@ export function useCustomerOrders(
 ) {
   const [rawOrders, setRawOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState<number>(Date.now());
-
-  // Interval pembersihan referensi tampilan setiap 15 detik (untuk batas 10 menit)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!customerUid) {
@@ -194,7 +185,6 @@ export function useCustomerOrders(
 
   const orders = useMemo(() => {
     if (!customerUid) return [];
-    const TEN_MINUTES_MS = 10 * 60 * 1000;
 
     return rawOrders.filter((order) => {
       // 1. Validasi customerUid
@@ -208,52 +198,20 @@ export function useCustomerOrders(
         return false;
       }
 
-      // 3. Pesanan masih aktif (status BARU atau DITERIMA, atau paymentStatus BELUM_BAYAR dengan status bukan DIBATALKAN)
+      // 3. Pesanan SELESAI atau DIBATALKAN langsung keluar dari daftar aktif
+      if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
+        return false;
+      }
+
+      // 4. Pesanan masih aktif (status BARU atau DITERIMA, atau paymentStatus BELUM_BAYAR)
       const isOngoing =
         order.status === 'BARU' ||
         order.status === 'DITERIMA' ||
-        (order.paymentStatus === 'BELUM_BAYAR' && order.status !== 'DIBATALKAN');
+        order.paymentStatus === 'BELUM_BAYAR';
 
-      if (isOngoing) return true;
-
-      // 4. Pesanan SELESAI atau DIBATALKAN tetap terlihat selama 10 menit sejak completedAt atau cancelledAt
-      if (order.status === 'SELESAI') {
-        const completedMs = order.completedAt?.toMillis
-          ? order.completedAt.toMillis()
-          : order.completedAt?.seconds
-          ? order.completedAt.seconds * 1000
-          : order.updatedAt?.toMillis
-          ? order.updatedAt.toMillis()
-          : order.updatedAt?.seconds
-          ? order.updatedAt.seconds * 1000
-          : null;
-
-        if (completedMs && currentTime - completedMs <= TEN_MINUTES_MS) {
-          return true;
-        }
-        return false;
-      }
-
-      if (order.status === 'DIBATALKAN') {
-        const cancelledMs = order.cancelledAt?.toMillis
-          ? order.cancelledAt.toMillis()
-          : order.cancelledAt?.seconds
-          ? order.cancelledAt.seconds * 1000
-          : order.updatedAt?.toMillis
-          ? order.updatedAt.toMillis()
-          : order.updatedAt?.seconds
-          ? order.updatedAt.seconds * 1000
-          : null;
-
-        if (cancelledMs && currentTime - cancelledMs <= TEN_MINUTES_MS) {
-          return true;
-        }
-        return false;
-      }
-
-      return false;
+      return isOngoing;
     });
-  }, [rawOrders, customerUid, activeTableNumber, currentTime]);
+  }, [rawOrders, customerUid, activeTableNumber]);
 
   return { orders, rawOrders, loading };
 }

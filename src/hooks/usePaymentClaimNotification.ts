@@ -3,6 +3,7 @@ import { orderService } from '../services/orderService';
 import { useSettings } from './useSettings';
 import { useSoundStore } from '../store/soundStore';
 import { useUiStore } from '../store/uiStore';
+import { useClaimPopupStore } from '../store/claimPopupStore';
 import { audioEngine } from '../lib/audioEngine';
 import { getDateKeyJakarta, formatRupiah, formatVoiceOrderText } from '../lib/formatters';
 import { DEFAULT_SETTINGS } from '../config/constants';
@@ -31,9 +32,9 @@ export function usePaymentClaimNotification() {
   const { settings } = useSettings();
   const { soundEnabled, volume, isCurrentlyMuted } = useSoundStore();
   const { addToast } = useUiStore();
+  const { addClaim, removeClaim } = useClaimPopupStore();
 
   const isInitialLoadRef = useRef<boolean>(true);
-  const isPlayingAudioRef = useRef<boolean>(false);
   const dateKey = getDateKeyJakarta(new Date());
 
   // Simpan nilai terbaru dalam ref agar tidak menyebabkan re-subscribe listener
@@ -52,19 +53,51 @@ export function usePaymentClaimNotification() {
   const addToastRef = useRef(addToast);
   addToastRef.current = addToast;
 
+  const addClaimRef = useRef(addClaim);
+  addClaimRef.current = addClaim;
+
+  const removeClaimRef = useRef(removeClaim);
+  removeClaimRef.current = removeClaim;
+
   useEffect(() => {
     isInitialLoadRef.current = true;
     const notifiedClaims = getSessionNotifiedClaims();
 
     const unsubscribe = orderService.subscribeTodayOrders(
       dateKey,
-      async (orders) => {
-        // 1. Pada pemuatan pertama / re-mount / listener tersambung kembali:
-        // Catat semua pesanan yang sudah berstatus claimed agar TIDAK diputar ulang saat halaman dimuat ulang
+      (orders) => {
+        // 1. Bersihkan popup untuk setiap pesanan yang sudah LUNAS, DIBATALKAN, atau SELESAI
+        orders.forEach((o) => {
+          if (
+            o.paymentStatus === 'LUNAS' ||
+            o.status === 'DIBATALKAN' ||
+            o.status === 'SELESAI'
+          ) {
+            removeClaimRef.current(o.id);
+          }
+        });
+
+        // 2. Pada pemuatan pertama / re-mount / listener tersambung kembali:
+        // Klaim yang sudah ada dicatat sebagai sudah diumumkan agar tidak dibunyikan ulang saat halaman dimuat,
+        // TETAPI klaim belum lunas yang masih aktif tetap dimasukkan ke popup lewat addClaim tanpa suara.
         if (isInitialLoadRef.current) {
           orders.forEach((o) => {
             if (o.customerClaimedPaid) {
               notifiedClaims.add(o.id);
+              if (
+                o.paymentStatus !== 'LUNAS' &&
+                o.status !== 'DIBATALKAN' &&
+                o.status !== 'SELESAI'
+              ) {
+                const payable = o.payableAmount || o.totalPrice;
+                addClaimRef.current({
+                  orderId: o.id,
+                  orderCode: o.orderCode,
+                  tableNumber: o.tableNumber,
+                  customerName: o.customerName,
+                  amount: payable,
+                });
+              }
             }
           });
           saveSessionNotifiedClaims(notifiedClaims);
@@ -72,9 +105,16 @@ export function usePaymentClaimNotification() {
           return;
         }
 
-        // 2. Pada snapshot berikutnya: Cari pesanan yang status customerClaimedPaid berubah dari false ke true
+        // 3. Pada snapshot berikutnya: Cari pesanan yang status customerClaimedPaid berubah dari false ke true
+        // Klaim bayar selalu diumumkan, apa pun status pesanannya (BARU atau DITERIMA),
+        // selama paymentStatus belum LUNAS dan status bukan DIBATALKAN atau SELESAI.
         const newlyClaimedOrders = orders.filter(
-          (o) => o.customerClaimedPaid && o.paymentStatus !== 'LUNAS' && !notifiedClaims.has(o.id)
+          (o) =>
+            o.customerClaimedPaid &&
+            o.paymentStatus !== 'LUNAS' &&
+            o.status !== 'DIBATALKAN' &&
+            o.status !== 'SELESAI' &&
+            !notifiedClaims.has(o.id)
         );
 
         if (newlyClaimedOrders.length === 0) return;
@@ -85,52 +125,46 @@ export function usePaymentClaimNotification() {
           notifiedClaims.add(order.id);
           saveSessionNotifiedClaims(notifiedClaims);
 
-          // ATURAN UTAMA:
-          // Bila pesanan masih BARU saat klaim:
-          // Alarm pesanan baru yang sedang berbunyi tetap berlanjut sampai diterima,
-          // banner klaim tampil di kartu dan popup TANPA suara tambahan.
-          if (order.status === 'BARU') {
-            continue;
-          }
-
-          // Klaim bayar pada pesanan non-BARU (misalnya DITERIMA):
-          // Tampilkan toast dan banner kuning menetap di kartu: "CUSTOMER MENGKLAIM SUDAH BAYAR - cek dana masuk Rp X"
           const payable = order.payableAmount || order.totalPrice;
           const nominalFormatted = formatRupiah(payable);
 
+          // Masukkan ke popup klaim bayar
+          addClaimRef.current({
+            orderId: order.id,
+            orderCode: order.orderCode,
+            tableNumber: order.tableNumber,
+            customerName: order.customerName,
+            amount: payable,
+          });
+
+          // Tampilkan toast
           addToastRef.current(
             'info',
             `CUSTOMER MENGKLAIM SUDAH BAYAR - cek dana masuk ${nominalFormatted} (Meja ${order.tableNumber})`
           );
 
-          // Putar SEKALI nada pendek khusus lalu suara paymentVoiceText (tidak berulang)
+          // Jika suara aktif dan tidak dimute, antrekan pengumuman suara ke audioEngine
           const isMuted = isCurrentlyMutedRef.current();
-          if (soundEnabledRef.current && !isMuted && !isPlayingAudioRef.current) {
-            isPlayingAudioRef.current = true;
-            try {
-              const template =
-                settingsRef.current?.paymentVoiceText ||
-                DEFAULT_SETTINGS.paymentVoiceText ||
-                'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek mutasi.';
+          if (soundEnabledRef.current && !isMuted) {
+            const template =
+              settingsRef.current?.paymentVoiceText ||
+              DEFAULT_SETTINGS.paymentVoiceText ||
+              'Pelanggan meja {meja} atas nama {nama} menyatakan sudah membayar {total}. Silakan cek dana masuk.';
 
-              const formattedVoice = formatVoiceOrderText(template, {
-                orderCode: order.orderCode,
-                tableNumber: order.tableNumber,
-                customerName: order.customerName,
-                payableAmount: order.payableAmount,
-                totalPrice: order.totalPrice,
-                items: order.items,
-              });
+            const formattedVoice = formatVoiceOrderText(template, {
+              orderCode: order.orderCode,
+              tableNumber: order.tableNumber,
+              customerName: order.customerName,
+              payableAmount: order.payableAmount,
+              totalPrice: order.totalPrice,
+              items: order.items,
+            });
 
-              await audioEngine.playPaymentClaimNotification({
-                voiceText: formattedVoice,
-                volume: volumeRef.current,
-              });
-            } catch (err) {
-              console.warn('[PaymentClaimNotification] Audio playback error:', err);
-            } finally {
-              isPlayingAudioRef.current = false;
-            }
+            audioEngine.enqueueAnnouncement({
+              kind: 'CLAIM',
+              voiceText: formattedVoice,
+              volume: volumeRef.current,
+            });
           }
         }
       },

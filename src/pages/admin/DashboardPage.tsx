@@ -49,6 +49,28 @@ export const DashboardPage: React.FC = () => {
   const [seeding, setSeeding] = useState(false);
   const [completingAll, setCompletingAll] = useState(false);
 
+  // Listener untuk menggulir dan menyorot kartu saat admin menekan "Lihat Pesanan" dari ClaimPaymentPopup
+  React.useEffect(() => {
+    const handleFocusOrder = (e: any) => {
+      const orderId = e?.detail?.orderId;
+      if (!orderId) return;
+      setStatusFilter('ALL');
+      setSearchQuery('');
+      setTimeout(() => {
+        const el = document.getElementById(`order-card-${orderId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-4', 'ring-[#FF6B1A]', 'ring-offset-2');
+          setTimeout(() => {
+            el.classList.remove('ring-4', 'ring-[#FF6B1A]', 'ring-offset-2');
+          }, 2000);
+        }
+      }, 150);
+    };
+    window.addEventListener('smart_resto_focus_order', handleFocusOrder);
+    return () => window.removeEventListener('smart_resto_focus_order', handleFocusOrder);
+  }, [setStatusFilter, setSearchQuery]);
+
   const handleSeedData = async () => {
     setSeeding(true);
     try {

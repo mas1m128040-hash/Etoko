@@ -53,6 +53,7 @@ export const OrderStatusPage: React.FC = () => {
   const prevPaymentStatusRef = useRef<string | undefined>(undefined);
 
   const [currentUid, setCurrentUid] = useState<string | null>(auth.currentUser?.uid || null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
   // 1. Ensure anonymous session and track active UID
   useEffect(() => {
@@ -243,6 +244,41 @@ export const OrderStatusPage: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const activeTableNumber =
+    localStorage.getItem('smart_resto_table_number') || '';
+  const backToMenuUrl = activeTableNumber
+    ? `/menu?table=${encodeURIComponent(activeTableNumber)}`
+    : '/menu';
+
+  // 5. Hitung mundur otomatis kembali ke menu jika pesanan SELESAI atau DIBATALKAN
+  useEffect(() => {
+    if (!order) return;
+    if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
+      const activeUid = auth.currentUser?.uid || currentUid || order.customerUid;
+      clearActiveOrderForUser(activeUid);
+
+      if (redirectCountdown === null) {
+        setRedirectCountdown(20);
+      }
+    } else {
+      setRedirectCountdown(null);
+    }
+  }, [order?.status, currentUid]);
+
+  useEffect(() => {
+    if (redirectCountdown === null) return;
+    if (redirectCountdown <= 0) {
+      navigate(backToMenuUrl);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setRedirectCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [redirectCountdown, backToMenuUrl, navigate]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex items-center justify-center p-4">
@@ -255,12 +291,6 @@ export const OrderStatusPage: React.FC = () => {
       </div>
     );
   }
-
-  const activeTableNumber =
-    localStorage.getItem('smart_resto_table_number') || '';
-  const backToMenuUrl = activeTableNumber
-    ? `/menu?table=${encodeURIComponent(activeTableNumber)}`
-    : '/menu';
 
   if (error || !order) {
     return (
@@ -304,47 +334,9 @@ export const OrderStatusPage: React.FC = () => {
     );
   }
 
-  // Cek masa simpan tampilan pelanggan:
-  // Pesanan SELESAI atau DIBATALKAN tetap terlihat di halaman statusnya selama 10 menit sejak completedAt atau cancelledAt, lalu hilang dari sisi customer.
-  const isCustomerOwner = currentUid && order.customerUid === currentUid;
-  const TEN_MINUTES_MS = 10 * 60 * 1000;
-
-  if (isCustomerOwner && (order.status === 'SELESAI' || order.status === 'DIBATALKAN')) {
-    const endMs =
-      order.status === 'SELESAI'
-        ? order.completedAt?.toMillis
-          ? order.completedAt.toMillis()
-          : order.completedAt?.seconds
-          ? order.completedAt.seconds * 1000
-          : order.updatedAt?.toMillis
-          ? order.updatedAt.toMillis()
-          : null
-        : order.cancelledAt?.toMillis
-        ? order.cancelledAt.toMillis()
-        : order.cancelledAt?.seconds
-        ? order.cancelledAt.seconds * 1000
-        : order.updatedAt?.toMillis
-        ? order.updatedAt.toMillis()
-        : null;
-
-    if (endMs && Date.now() - endMs > TEN_MINUTES_MS) {
-      return (
-        <div className="min-h-screen bg-stone-50 dark:bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4">
-            <CheckCircle2 className="w-8 h-8" />
-          </div>
-          <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
-            Sesi Pesanan Telah Berakhir
-          </h2>
-          <p className="text-xs text-stone-500 max-w-xs mt-1 mb-6">
-            Pesanan #{order.orderCode} telah {order.status === 'SELESAI' ? 'selesai' : 'dibatalkan'} lebih dari 10 menit yang lalu. Seluruh riwayat transaksi tetap tersimpan utuh di sistem restoran.
-          </p>
-          <Button variant="primary" onClick={() => navigate(backToMenuUrl)}>
-            Kembali ke Daftar Menu {activeTableNumber ? `(Meja ${activeTableNumber})` : ''}
-          </Button>
-        </div>
-      );
-    }
+  // Begitu pesanan SELESAI atau DIBATALKAN, pastikan referensi penyimpanan lokal langsung dibersihkan seketika
+  if (order.status === 'SELESAI' || order.status === 'DIBATALKAN') {
+    clearActiveOrderForUser(auth.currentUser?.uid || currentUid || order.customerUid);
   }
 
   // Tahap status (Hanya 3 tahap customer):
@@ -399,6 +391,68 @@ export const OrderStatusPage: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-xl w-full mx-auto p-3 sm:p-4 space-y-3">
+        {/* Banner Layar Akhir: Pesanan Selesai */}
+        {order.status === 'SELESAI' && (
+          <Card className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 rounded-2xl text-center space-y-2.5">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-emerald-950 dark:text-emerald-100">
+                Pesanan Selesai. Terima kasih!
+              </h3>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                Selamat menikmati hidangan Anda di Meja {order.tableNumber}. Seluruh pesanan telah disajikan.
+              </p>
+            </div>
+            {redirectCountdown !== null && (
+              <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                  Kembali ke Menu (<span className="font-mono font-bold">{redirectCountdown} detik</span>)
+                </span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate(backToMenuUrl)}
+                >
+                  Kembali ke Menu Sekarang
+                </Button>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Banner Layar Akhir: Pesanan Dibatalkan */}
+        {order.status === 'DIBATALKAN' && (
+          <Card className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-500/30 rounded-2xl text-center space-y-2.5">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+              <XCircle className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-red-950 dark:text-red-100">
+                Pesanan Dibatalkan
+              </h3>
+              <p className="text-xs text-red-800 dark:text-red-300">
+                Alasan: {order.cancelReason || 'Dibatalkan oleh pihak restoran.'}
+              </p>
+            </div>
+            {redirectCountdown !== null && (
+              <div className="pt-2 border-t border-red-200/60 dark:border-red-800/60 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <span className="text-xs font-medium text-red-800 dark:text-red-300">
+                  Kembali ke Menu (<span className="font-mono font-bold">{redirectCountdown} detik</span>)
+                </span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate(backToMenuUrl)}
+                >
+                  Kembali ke Menu Sekarang
+                </Button>
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Main Status Header Card */}
         <Card className="p-3.5 sm:p-4 bg-white dark:bg-[#1e1e1e] border border-stone-200 dark:border-stone-800 shadow-sm rounded-2xl space-y-3">
           {/* Baris 1: Label Nomor Antrean, Nomor Order (clamp), dan Lencana Meja & Nama */}

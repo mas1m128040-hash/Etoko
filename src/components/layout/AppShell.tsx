@@ -5,9 +5,11 @@ import { BottomNav } from './BottomNav';
 import { SoundGate } from '../alarm/SoundGate';
 import { AlarmBanner } from '../alarm/AlarmBanner';
 import { NewOrderPopup } from '../alarm/NewOrderPopup';
+import { ClaimPaymentPopup } from '../alarm/ClaimPaymentPopup';
 import { ToastContainer } from '../ui/Toast';
 import { useNewOrderAlarm } from '../../hooks/useNewOrderAlarm';
 import { usePaymentClaimNotification } from '../../hooks/usePaymentClaimNotification';
+import { useAudioUnlock } from '../../hooks/useAudioUnlock';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { useUiStore } from '../../store/uiStore';
 
@@ -23,6 +25,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   enableWakeLock = true,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useAudioUnlock();
   const { newOrders, acceptSingleOrder, acceptAllNewOrders } = useNewOrderAlarm();
   usePaymentClaimNotification();
   const { isActive: wakeLockActive } = useWakeLock(enableWakeLock);
@@ -62,6 +65,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
         {/* Mobile Bottom Navigation */}
         <BottomNav />
+
+        {/* Floating Realtime Claim Payment Popup */}
+        <ClaimPaymentPopup />
 
         {/* Fullscreen Realtime New Order Popup */}
         <NewOrderPopup

@@ -23,12 +23,17 @@ import {
   formatRupiah,
   formatTimeJakarta,
   formatDateTimeJakarta,
+  formatVoiceOrderText,
 } from '../../lib/formatters';
 import { orderService } from '../../services/orderService';
 import { settingsService } from '../../services/settingsService';
 import { generateDynamicQris } from '../../lib/qris';
 import { useAuth } from '../../hooks/useAuth';
 import { useUiStore } from '../../store/uiStore';
+import { useSoundStore } from '../../store/soundStore';
+import { useClaimPopupStore } from '../../store/claimPopupStore';
+import { audioEngine } from '../../lib/audioEngine';
+import { DEFAULT_SETTINGS } from '../../config/constants';
 
 interface OrderCardProps {
   order: Order;
@@ -48,6 +53,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 }) => {
   const { profile } = useAuth();
   const { addToast } = useUiStore();
+  const { soundEnabled, isCurrentlyMuted } = useSoundStore();
+  const removeClaim = useClaimPopupStore((s) => s.removeClaim);
 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -142,10 +149,33 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         name: profile.name,
       });
       setShowMarkPaidModal(false);
+      removeClaim(order.id);
       addToast(
         'success',
         `Pesanan #${order.orderCode} ditandai Lunas (${method}).`
       );
+
+      // Bacakan SATU KALI readyVoiceText bila audio aktif
+      if (soundEnabled && !isCurrentlyMuted()) {
+        const readyTemplate =
+          settings?.readyVoiceText ||
+          DEFAULT_SETTINGS.readyVoiceText ||
+          'Pembayaran meja {meja} nomor {nomor} diterima. Silakan teruskan ke dapur.';
+
+        const formattedReadyVoice = formatVoiceOrderText(readyTemplate, {
+          orderCode: order.orderCode,
+          tableNumber: order.tableNumber,
+          customerName: order.customerName,
+          payableAmount: payable,
+          totalPrice: order.totalPrice,
+          items: order.items,
+        });
+
+        audioEngine.enqueueAnnouncement({
+          kind: 'PAID',
+          voiceText: formattedReadyVoice,
+        });
+      }
     } catch (err: any) {
       addToast('error', err?.message || 'Gagal menandai lunas.');
     } finally {
@@ -175,6 +205,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     return (
       <>
         <div
+          id={`order-card-${order.id}`}
           onClick={() => setRowExpanded(!rowExpanded)}
           className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer ${
             isSelesai
@@ -362,6 +393,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   return (
     <>
       <Card
+        id={`order-card-${order.id}`}
         className={`overflow-hidden transition-all duration-200 flex flex-col justify-between ${
           isOverdueUnpaid
             ? 'ring-2 ring-red-500 bg-red-50/15 dark:bg-red-950/20 shadow-md'
