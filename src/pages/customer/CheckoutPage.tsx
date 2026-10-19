@@ -39,7 +39,7 @@ import { Card } from '../../components/ui/Card';
 import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import { audioEngine } from '../../lib/audioEngine';
 import { useNow } from '../../hooks/useNow';
-import { saveActiveOrderForUser } from '../../lib/orderStorage';
+import { saveActiveOrderForUser, clearActiveOrderForUser } from '../../lib/orderStorage';
 import { getDeviceId } from '../../lib/deviceId';
 
 export const CheckoutPage: React.FC = () => {
@@ -90,7 +90,12 @@ export const CheckoutPage: React.FC = () => {
     const unsubscribe = orderService.subscribeSingleOrder(
       submittedOrder.id,
       (updatedOrder) => {
-        if (!updatedOrder) return;
+        if (!updatedOrder) {
+          // Dokumen pesanan telah dihapus (misal pembersihan uji coba oleh admin)
+          clearActiveOrderForUser(auth.currentUser?.uid);
+          setSubmittedOrder(null);
+          return;
+        }
         setIsRealtimeConnected(true);
 
         // Saat paymentStatus berubah menjadi LUNAS: Beri getar singkat & chime pendek
@@ -147,6 +152,21 @@ export const CheckoutPage: React.FC = () => {
 
     init();
   }, []);
+
+  // Monitor existingUnpaidOrder agar bila terhapus saat data uji coba direset, blokir langsung terlepas
+  useEffect(() => {
+    if (!existingUnpaidOrder?.id) return;
+    const unsub = orderService.subscribeSingleOrder(
+      existingUnpaidOrder.id,
+      (liveOrder) => {
+        if (!liveOrder || liveOrder.status === 'DIBATALKAN' || liveOrder.paymentStatus === 'LUNAS') {
+          clearActiveOrderForUser(auth.currentUser?.uid);
+          setExistingUnpaidOrder(null);
+        }
+      }
+    );
+    return () => unsub();
+  }, [existingUnpaidOrder?.id]);
 
   // 2. Determine default payment method once settings load
   useEffect(() => {

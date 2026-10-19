@@ -137,7 +137,16 @@ export const OrderStatusPage: React.FC = () => {
           navigate(backToMenuUrl, { replace: true });
         }
       },
-      (err) => {
+      (err: any) => {
+        // Jika dokumen pesanan sudah tidak ada atau dihapus, tangani dengan tenang tanpa pesan error
+        if (err?.code === 'permission-denied' || err?.code === 'not-found') {
+          const activeUid = auth.currentUser?.uid || currentUid;
+          clearActiveOrderForUser(activeUid);
+          setOrder(null);
+          setLoading(false);
+          navigate(backToMenuUrl, { replace: true });
+          return;
+        }
         console.error('Error fetching order:', err);
         setIsRealtimeConnected(false);
         setError('Gagal memuat status pesanan. Pastikan koneksi internet aktif.');
